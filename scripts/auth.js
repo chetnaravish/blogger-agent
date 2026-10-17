@@ -171,8 +171,12 @@ console.log('  -> "Advanced" click karein');
 console.log('  -> phir "Go to ... (unsafe)" click karein');
 console.log('  -> phir "Allow" click karein');
 console.log('-------------------------------------------------------------------\n');
-console.log('Agar browser na khule, ye URL manually kholiye:');
-console.log(`  ${consentUrl}\n`);
+console.log('Agar browser na khule, ye POORI line copy karke Chrome me kholiye.');
+console.log('Dhyan rahe: URL poori copy ho, beech me se kuch na toote.\n');
+// Printed flush-left on purpose, so there is no leading whitespace to
+// copy along with it. Copying a wrapped URL is what causes
+// "Required parameter is missing: response_type".
+console.log(consentUrl);
 
 openBrowser(consentUrl);
 

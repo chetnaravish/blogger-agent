@@ -9,7 +9,14 @@
 
 const DEFAULT_NICHE = 'AI tools, web development, and digital marketing for beginners';
 const DEFAULT_LANGUAGE = 'English';
-const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+// We use qwen/qwen3.8-27b because it returns strict JSON reliably.
+//
+// WHY NOT the gpt-oss models (openai/gpt-oss-120b / 20b)?
+// They are "reasoning" models: they burn most of the token budget on
+// thinking and then return an EMPTY answer, and they fail Groq's strict
+// JSON mode with "Failed to validate JSON". Tested and rejected.
+// qwen also gives us a much friendlier per-minute token limit.
+const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
 
 /** Reads a string value, falling back to a default when it is blank. */
 function str(name, fallback) {
