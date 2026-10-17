@@ -490,8 +490,29 @@ Agent **khud** naya model chun leta hai aur aapko bata deta hai:
 
 Koi kaam nahi karna. Agar manually fix karna ho to `.env` me:
 ```
-GROQ_MODEL="openai/gpt-oss-120b"
+GROQ_MODEL="qwen/qwen3.8-27b"
 ```
+
+---
+
+## ⚠️ `fetch failed`
+
+**Matlab:** Net connection beech me toot gaya. Aksar iska matlab hota hai ki
+Groq ka **per-minute token limit** khatam ho gaya tha.
+
+Code khud 20 second rukh ke dobara try karta hai. Aapko kuch nahi karna.
+Agar baar baar aaye to ek-ek step chala kar dekho — `npm run post`.
+
+---
+
+## ⚠️ Model JSON nahi de raha (`Failed to validate JSON`)
+
+Ye problem **`gpt-oss` models** me hoti hai. Wo "reasoning" models hain —
+token limit poora reasoning me kha jaata hai aur jawab khaali aa jaata hai.
+
+Isliye project me default model **`qwen/qwen3.8-27b`** rakha hai, jo hamesha
+theek JSON deta hai. Agar `.env` me `GROQ_MODEL` kuch aur set kiya hai to
+use blank kar do, ya `qwen/qwen3.8-27b` kar do.
 
 ---
 
