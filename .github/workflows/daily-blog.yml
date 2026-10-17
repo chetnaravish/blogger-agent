@@ -1,0 +1,111 @@
+# ============================================================
+#  Daily Blog Post - runs at 8:00 AM IST, every day
+#
+#  Cron "30 2 * * *" is UTC. UTC + 5:30 = IST, so 02:30 UTC = 08:00 IST.
+#
+#  NOTE: GitHub's cron can start a few minutes late, and on busy
+#  days even later. That is normal and not a bug in this project.
+# ============================================================
+
+name: Daily Blog Post
+
+on:
+  schedule:
+    # 8:00 AM IST every day. GitHub cron always uses UTC.
+    - cron: "30 2 * * *"
+
+  # Lets you trigger a run by hand from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      publish_as_draft:
+        description: "true = save as draft, false = publish live"
+        required: false
+        default: "true"
+        type: string
+
+# Two runs must never fight over the same posted.json.
+concurrency:
+  group: daily-blog
+  cancel-in-progress: false
+
+# Needed so we can push images and posted.json back to the repo.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Write and publish one post
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Get the code.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      # 2. Set up Node.
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # 3. Install the only dependency (dotenv).
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Tell git who is committing.
+      - name: Configure the bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # 5. Run the agent. It saves images into images/ and pushes
+      #    them itself, then waits for jsDelivr before publishing.
+      #    That is why images and posted.json end up in TWO commits:
+      #    the image must be on GitHub before the post can link to it.
+      - name: Run the blog agent
+        run: node src/index.js
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
+
+          # Optional ones. ${{ vars.X }} comes from repo Variables and
+          # is empty when you never set it, which the code treats as
+          # "use the default".
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          BLOG_NICHE: ${{ vars.BLOG_NICHE }}
+          BLOG_LANGUAGE: ${{ vars.BLOG_LANGUAGE }}
+
+          # true by default, so nothing goes live until you are ready.
+          PUBLISH_AS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_as_draft || 'true' }}
+
+          # The agent may commit and push, so it needs write access.
+          AUTO_COMMIT_PUSH: "true"
+
+          # Log the result to the terminal, never print any secret.
+          DOTENV_CONFIG_QUIET: "true"
+
+      # 6. Push the updated posted.json (only if it actually changed).
+      #    The agent already pushed images in the previous step.
+      - name: Commit posted.json if it changed
+        run: |
+          git add posted.json
+          if git diff --staged --quiet --exit-code; then
+            echo "posted.json did not change. Nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: record post for $(date -u +%Y-%m-%d)"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
+
+      # 7. If we did not start on the default branch, tidy up.
+      - name: Confirm the images are committed
+        run: |
+          echo "Files on the remote branch:"
+          git ls-tree --name-only -r origin/${{ github.event.repository.default_branch }} -- images | tail -20

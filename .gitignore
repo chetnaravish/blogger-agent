@@ -1,0 +1,21 @@
+# ---- SECRETS: never commit these ----
+.env
+.env.local
+.env.*.local
+client_secret*.json
+credentials.json
+token.json
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---- OS / editor junk ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---- Logs ----
+*.log
