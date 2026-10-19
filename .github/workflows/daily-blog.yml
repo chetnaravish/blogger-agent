@@ -98,7 +98,30 @@ jobs:
           # Log the result to the terminal, never print any secret.
           DOTENV_CONFIG_QUIET: "true"
 
-      # 6. Push the updated posted.json (only if it actually changed).
+      # 6. If the agent failed, print a plain-language diagnosis.
+      #    check-env.js prints only variable NAMES, never values.
+      - name: Diagnosis (only if the agent failed)
+        if: failure()
+        run: |
+          echo "======================================================"
+          echo " The blog agent failed. Here is what to look at:"
+          echo "======================================================"
+          echo ""
+          echo "Any line marked MISSING below means that GitHub Secret is"
+          echo "missing, empty, or has a stray quote/spaces in it."
+          echo ""
+          node scripts/check-env.js || true
+          echo ""
+          echo "If all keys are OK, the real error is in the 'Run the blog"
+          echo "agent' step above - scroll up and read the FAILED box."
+          echo "Most common causes:"
+          echo "  * GOOGLE_REFRESH_TOKEN was revoked -> run 'npm run auth' locally"
+          echo "  * GROQ_API_KEY was rotated -> copy the new one into .env"
+          echo "  * a Groq model was retired -> the agent auto-picks a new one"
+          echo ""
+          echo "Full guide: docs/HOW-TO.md"
+
+      # 7. Push the updated posted.json (only if it actually changed).
       #    The agent already pushed images in the previous step.
       - name: Commit posted.json if it changed
         run: |
