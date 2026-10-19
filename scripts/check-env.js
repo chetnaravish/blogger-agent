@@ -20,6 +20,7 @@ const OPTIONAL = [
   'BLOG_NICHE',
   'BLOG_LANGUAGE',
   'PUBLISH_AS_DRAFT',
+  'PUBLISH_LIVE_DAILY',
   'AUTO_COMMIT_PUSH',
   'IMAGE_TIMEOUT_SEC',
 ];
@@ -63,9 +64,24 @@ for (const name of OPTIONAL) {
   console.log(`  [ ${empty ? 'DEFAULT' : '  SET  '} ] ${name}  -> ${label}`);
 }
 
-console.log('\nIMAGES');
+console.log('IMAGES');
 console.log('  No API key needed. Pollinations first, Openverse as backup,');
 console.log('  images saved into images/ and served via jsDelivr.');
+
+// Tell the user plainly whether this run will be a draft or live.
+const draft = (process.env.PUBLISH_AS_DRAFT ?? '').trim().toLowerCase();
+const liveDaily = (process.env.PUBLISH_LIVE_DAILY ?? '').trim().toLowerCase();
+const willBeDraft = draft === '' ? true : draft === 'auto' ? liveDaily !== 'true' : draft !== 'false';
+
+console.log('\nPUBLISH MODE');
+console.log(
+  `  ${willBeDraft
+    ? 'DRAFT - readers will NOT see this post. Safe.'
+    : 'LIVE  - the post will be published publicly and visible to readers!'}`
+);
+if (draft === 'auto') {
+  console.log(`  (PUBLISH_AS_DRAFT="auto" and PUBLISH_LIVE_DAILY="${liveDaily || '(not set)'}")`);
+}
 
 console.log('');
 

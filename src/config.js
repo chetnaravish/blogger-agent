@@ -27,10 +27,18 @@ function str(name, fallback) {
 /**
  * PUBLISH_AS_DRAFT: we treat ANYTHING other than a clear "false"
  * as draft. That way an empty or typo'd value can never publish live.
+ *
+ * The special value "auto" means "let PUBLISH_LIVE_DAILY decide".
+ * GitHub Actions uses that, so a scheduled run can go live just by
+ * setting a GitHub variable, without editing the workflow file.
  */
 function bool(name, fallback) {
   const value = process.env[name];
   if (value === undefined || value === null || value.trim() === '') return fallback;
+  if (value.trim().toLowerCase() === 'auto') {
+    const live = (process.env.PUBLISH_LIVE_DAILY ?? '').trim().toLowerCase();
+    return live !== 'true';
+  }
   return value.trim().toLowerCase() !== 'false';
 }
 

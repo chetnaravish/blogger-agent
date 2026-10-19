@@ -83,8 +83,14 @@ jobs:
           BLOG_NICHE: ${{ vars.BLOG_NICHE }}
           BLOG_LANGUAGE: ${{ vars.BLOG_LANGUAGE }}
 
-          # true by default, so nothing goes live until you are ready.
-          PUBLISH_AS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_as_draft || 'true' }}
+          # Draft by default, so nothing goes live until you are ready.
+          #
+          # Manual run  : the "publish_as_draft" input above decides.
+          # Scheduled run: "auto" means let PUBLISH_LIVE_DAILY decide.
+          #                To publish live every morning, set the GitHub
+          #                variable PUBLISH_LIVE_DAILY = true.
+          PUBLISH_AS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_as_draft || 'auto' }}
+          PUBLISH_LIVE_DAILY: ${{ vars.PUBLISH_LIVE_DAILY }}
 
           # The agent may commit and push, so it needs write access.
           AUTO_COMMIT_PUSH: "true"

@@ -332,36 +332,45 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
 
   /**
    * One image, trying the main source then the backup.
+   * NOTHING in here is allowed to throw. If anything at all goes wrong
+   * we return null and the post simply goes out without this image.
+   *
    * @returns {Promise<object|null>} saved image record
    */
   async function makeOne({ slot, alt, keyword }) {
-    const prompt = buildPrompt({ topic: article.title, title: article.title, heading: alt });
+    try {
+      const prompt = buildPrompt({ topic: article.title, title: article.title, heading: alt });
 
-    // --- Main source ---
-    const generated = await generateFromPollinations(prompt, timeoutMs, slot);
-    if (generated) {
-      const filename = saveImage(generated, imagesDir, { date, slot });
-      result.sources.push(`Pollinations (${slot})`);
-      return { file: filename, bytes: generated.length, source: 'Pollinations', alt, credit: null };
+      // --- Main source ---
+      const generated = await generateFromPollinations(prompt, timeoutMs, slot);
+      if (generated) {
+        const filename = saveImage(generated, imagesDir, { date, slot });
+        result.sources.push(`Pollinations (${slot})`);
+        return { file: filename, bytes: generated.length, source: 'Pollinations', alt, credit: null };
+      }
+
+      // --- Backup source ---
+      const searchTerm = keyword || simplifyKeyword(keywords[0]) || article.title;
+      const backup = await fetchFromOpenverse(searchTerm, timeoutMs, slot);
+      if (backup) {
+        const filename = saveImage(backup.buffer, imagesDir, { date, slot });
+        result.sources.push(`Openverse (${slot})`);
+        return {
+          file: filename,
+          bytes: backup.buffer.length,
+          source: 'Openverse',
+          alt,
+          credit: backup.credit,
+        };
+      }
+
+      console.warn(`[images] Could not get an image for ${slot}. Moving on without it.`);
+      return null;
+    } catch (error) {
+      // Disk full, permissions, anything unexpected. Never crash the post.
+      console.warn(`[images] Unexpected problem with ${slot}: ${error.message}. Skipping this image.`);
+      return null;
     }
-
-    // --- Backup source ---
-    const searchTerm = keyword || simplifyKeyword(keywords[0]) || article.title;
-    const backup = await fetchFromOpenverse(searchTerm, timeoutMs, slot);
-    if (backup) {
-      const filename = saveImage(backup.buffer, imagesDir, { date, slot });
-      result.sources.push(`Openverse (${slot})`);
-      return {
-        file: filename,
-        bytes: backup.buffer.length,
-        source: 'Openverse',
-        alt,
-        credit: backup.credit,
-      };
-    }
-
-    console.warn(`[images] Could not get an image for ${slot}. Moving on without it.`);
-    return null;
   }
 
   // ---- 1. Hero image ----
@@ -369,7 +378,7 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
     slot: 'hero',
     alt: `Illustration for "${article.title}"`,
     keyword: keywords[0],
-  });
+  }).catch(() => null); // extra belt-and-braces, makeOne already never throws
   if (hero) result.hero = hero;
 
   // ---- 2. Section images ----
@@ -380,7 +389,7 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
       slot: `section-${index + 1}`,
       alt: `Illustration for "${heading}"`,
       keyword: keywords[index + 1] || keywords[0],
-    });
+    }).catch(() => null);
     if (image) result.sections.push(image);
   }
 

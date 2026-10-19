@@ -388,20 +388,28 @@ Aapko kuch nahi karna — na laptop on rakhna hai, na kuch.
 
 ---
 
-## 5.4 — Roz live post chahiye to?
+## 5.4 — Roz subah 8 baje LIVE karni hai to?
 
-**Har subah 8 baje LIVE** karni hai to GitHub par jao:
+**Tab tak sab draft hi banega — ye theek hai.** Jab aap ready ho:
 
 **Settings** → **Secrets and variables** → **Actions** → **Variables**
 → **New repository variable**
 
-| Name | Value |
+| Field | Value |
 |---|---|
-| `BLOG_LIVE_DAILY` | `true` |
+| Name | `PUBLISH_LIVE_DAILY` |
+| Value | `true` |
 
-> ⚠️ Ye optional hai. Agar ye variable nahi hai, to har run **draft**
-> banega (safe). Live karna ho to **Actions** tab se manually
-> `Run workflow` chalao aur `publish_as_draft` = **`false`** karo.
+Ab har roz 8:00 AM wali post **seedha live** ho jayegi.
+
+> ⚠️ **Dhyan rahe** — ye ON karte hi har roz post public ho jayegi.
+> Pakka live karna hai tabhi karein.
+>
+> Wapas draft karna hai to wahi variable ka value `false` kar do
+> (ya variable delete kar do).
+
+**Sirf ek post karni hai live?** Uske liye variable ki zaroorat nahi —
+bas **Actions** tab → **Run workflow** → `publish_as_draft` = **`false`**.
 
 ---
 
