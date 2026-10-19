@@ -139,9 +139,20 @@ export async function commitAndPush(message = 'chore: add blog images') {
     return { ok: false, reason: commit.stderr || 'git commit failed' };
   }
 
-  const push = await git(['push', 'origin', 'HEAD'], REPO_ROOT);
+  // Work out which branch we are really on. GitHub Actions can check out
+  // a detached HEAD, and a plain "git push origin HEAD" then either fails
+  // or creates a branch literally named HEAD. So we name the target
+  // explicitly instead.
+  let branch = (await git(['rev-parse', '--abbrev-ref', 'HEAD'], REPO_ROOT)).stdout;
+  if (!branch || branch === 'HEAD') {
+    // Detached: fall back to whatever origin is pointing at.
+    const symbolic = await git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], REPO_ROOT);
+    branch = symbolic.ok && symbolic.stdout ? symbolic.stdout.replace('origin/', '') : 'main';
+  }
+
+  const push = await git(['push', 'origin', `HEAD:refs/heads/${branch}`], REPO_ROOT);
   if (!push.ok) return { ok: false, reason: push.stderr || 'git push failed' };
 
-  console.log('[cdn] Images committed and pushed to GitHub.');
+  console.log(`[cdn] Images committed and pushed to origin/${branch}.`);
   return { ok: true };
 }
