@@ -78,14 +78,40 @@ function isJsonValidationProblem(error) {
   return text.includes('json_validate_failed') || text.includes('failed to validate json');
 }
 
+/**
+ * True when Groq refused because our max_tokens was bigger than the
+ * per-minute OUTPUT limit it enforces right now.
+ *
+ * The advertised max_completion_tokens on /models is NOT the same thing.
+ * qwen/qwen3.8-27b advertises 16384 but only hands out 1000 output
+ * tokens per minute on the free tier. So we learn the real number from
+ * this error and remember it.
+ */
+function readOutputCapFromError(error) {
+  const text = `${error?.body ?? ''} ${error?.message ?? ''}`;
+  const match = text.match(/output tokens per minute \(OTPM\):\s*Limit\s*(\d+)/i);
+  if (!match) return null;
+  // Leave a little room so we never sit exactly on the limit.
+  return Math.max(200, Number(match[1]) - 50);
+}
+
 /** GET /models - list of every model Groq offers right now. */
 export async function listModels() {
+  const detailed = await listModelsDetailed();
+  return detailed.map((m) => m.id);
+}
+
+/**
+ * GET /models, but keeps the whole entry so we can read
+ * max_completion_tokens, which is the real per-reply output cap.
+ */
+async function listModelsDetailed() {
   const response = await fetch(`${BASE_URL}/models`, {
     headers: { Authorization: `Bearer ${requireApiKey()}` },
   });
   if (!response.ok) throw await toError(response, 'Groq GET /models');
   const data = await response.json();
-  return Array.isArray(data?.data) ? data.data.map((m) => m.id) : [];
+  return Array.isArray(data?.data) ? data.data : [];
 }
 
 /**
@@ -145,11 +171,44 @@ async function resolveModel() {
   return better;
 }
 
-// Article generations are long, but 2500 tokens is plenty for ~1000 words.
-// Keeping this low matters: Groq allows only ~8000 tokens PER MINUTE, and a
-// too-high max_tokens makes us hit that ceiling and get the connection
-// dropped mid-request.
+// We ask for more than this, and groq.js clamps it down to whatever the
+// active model actually allows. Some free-tier models cap a single
+// response at only 1000 output tokens, and asking for more fails with
+// "Request too large ... on output tokens per minute (OTPM)".
 const MAX_TOKENS = 2500;
+
+// Per-model output cap. Learned from GET /models, and corrected downwards
+// if Groq complains that we asked for too much.
+const modelOutputCaps = new Map();
+
+/**
+ * Looks up the per-request output cap for the active model.
+ *
+ * The advertised number is only a starting point, so we also cache
+ * whatever we learn from an "OTPM" complaint.
+ */
+async function getModelOutputCap(model) {
+  if (!modelOutputCaps.has(model)) {
+    try {
+      const available = await listModelsDetailed();
+      const entry = available.find((m) => m.id === model);
+      const advertised = Number(entry?.max_completion_tokens) || 0;
+      modelOutputCaps.set(model, advertised > 0 ? advertised : MAX_TOKENS);
+    } catch {
+      modelOutputCaps.set(model, MAX_TOKENS); // never block a run over this
+    }
+  }
+  return modelOutputCaps.get(model);
+}
+
+/** Lowers what we ask for, after Groq told us the real ceiling. */
+function rememberOutputCap(model, cap) {
+  const previous = modelOutputCaps.get(model) ?? Infinity;
+  if (cap < previous) {
+    modelOutputCaps.set(model, cap);
+    console.log(`[groq] ${model} really allows ${cap} output tokens per reply. Using that from now on.`);
+  }
+}
 
 // Remembers when we last called Groq, and how long the token budget needs.
 let nextGroqCallNotBefore = 0;
@@ -221,11 +280,14 @@ export async function chat(messages, options = {}) {
 
     await respectRateLimit();
 
+    // Never ask for more than this model will actually give us.
+    const cap = await getModelOutputCap(getActiveModel());
+
     const body = {
       model: getActiveModel(),
       messages: useJsonMode ? messages : messages,
       temperature: 0.8,
-      max_tokens: MAX_TOKENS,
+      max_tokens: Math.min(MAX_TOKENS, cap),
     };
 
     if (useJsonMode) {
@@ -259,6 +321,7 @@ export async function chat(messages, options = {}) {
 
       if (!response.ok) {
         const error = await toError(response, 'Groq chat completion');
+        error.model = body.model; // so a cap complaint can be remembered per model
 
         if (error.status === 401) {
           throw new Error('Groq rejected GROQ_API_KEY (401). Copy the key again from console.groq.com/keys');
@@ -270,7 +333,16 @@ export async function chat(messages, options = {}) {
           continue;
         }
 
-        // Rate limited: wait for the server to tell us how long, then retry.
+        // We asked for a reply bigger than this model will give right now.
+        // Learn the real number and try again at that size, immediately.
+        const realCap = readOutputCapFromError(error);
+        if (realCap && attemptsLeft > 0) {
+          rememberOutputCap(error.model ?? getActiveModel(), realCap);
+          body.max_tokens = Math.min(body.max_tokens, realCap);
+          continue;
+        }
+
+        // Rate limited by requests, not size: wait for the server to reset.
         if ((error.status === 429 || error.status === 503) && attemptsLeft > 0) {
           const waitSeconds = 20;
           console.warn(`[groq] ${error.status} from Groq. Waiting ${waitSeconds}s so the token limit resets...`);

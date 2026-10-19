@@ -23,7 +23,9 @@
 import 'dotenv/config';
 
 import { getConfig } from './config.js';
-import { getIstDate, getIstTime, readPosted, hasLivePostForDate, addEntry, getRecentTitles } from './logger.js';
+import { loadCategories, chooseCategory, parseCategoryOverride, describeRotation } from './categories.js';
+import { getIstDate, getIstTime, readPosted, hasLivePostForDate, addEntry, getRecentTitles, getTitlesForCategory } from './logger.js';
+import { getNewsHeadlines } from './news.js';
 import { generateTopic } from './topic.js';
 import { generateArticle } from './article.js';
 import { findImages } from './images.js';
@@ -70,9 +72,30 @@ async function main() {
   console.log(' Blogger Agent - daily run');
   console.log(` Date (IST): ${today}  Time: ${getIstTime()} IST`);
   console.log(` Mode: ${config.isDraft ? 'DRAFT (not visible to readers)' : 'LIVE PUBLISH'}`);
-  console.log(` Niche: ${config.niche}`);
   console.log(` Auto push images: ${config.autoCommitPush ? 'yes' : 'no (you push them)'}`);
   console.log('========================================');
+
+  // ---- Step 0: which category are we writing about today? ----
+  const categories = loadCategories();
+  const override = parseCategoryOverride();
+
+  if (process.argv.includes('--show-rotation')) {
+    console.log('\nCategory rotation right now:');
+    console.log(describeRotation(categories, readPosted()));
+    console.log('');
+  }
+
+  const { category, reason: categoryReason } = chooseCategory({
+    posted: readPosted(),
+    categories,
+    override,
+    today,
+  });
+
+  console.log(`Category today : ${category.id} (${category.label})`);
+  console.log(`  why          : ${categoryReason}`);
+  console.log(`  audience     : ${category.audience}`);
+  if (override) console.log(`  override     : forced with --category=${override}`);
 
   // ---- Step 1: duplicate guard --------------------------------
   step(1, 'Checking whether today\'s post already exists');
@@ -93,14 +116,25 @@ async function main() {
   // ---- Step 2: topic -------------------------------------------
   step(2, 'Choosing a fresh topic');
 
-  const recentTitles = getRecentTitles(30, posted);
+  const recentTitles = getRecentTitles(40, posted);
+  const sameCategoryTitles = getTitlesForCategory(category.id, posted);
+
   console.log(`      Sending the last ${recentTitles.length} title(s) so we do not repeat`);
 
-  const { topic, angle } = await generateTopic({
+  // News-based categories (AI Updates) get real headlines so the topic
+  // is grounded in what actually happened, not the model's old memory.
+  const news = await getNewsHeadlines({ category, count: 8 });
+
+  const { topic, angle, judgeReason, attempts } = await generateTopic({
+    category,
     recentTitles,
-    niche: config.niche,
     language: config.language,
+    isNewsBased: category.news_based === true,
+    newsHeadlines: news.headlines,
+    today,
   });
+
+  console.log(`      Category used ${attempts} attempt(s), judge said: "${judgeReason}"`);
 
   // ---- Step 3: article -----------------------------------------
   step(3, 'Writing the article');
@@ -108,8 +142,11 @@ async function main() {
   const article = await generateArticle({
     topic,
     angle,
+    category,
     niche: config.niche,
     language: config.language,
+    today,
+    newsHeadlines: news.headlines,
   });
 
   // ---- Step 4: images ------------------------------------------
@@ -221,6 +258,8 @@ async function main() {
 
   addEntry({
     date: today,
+    category: category.id,
+    categoryLabel: category.label,
     title: article.title,
     topic,
     url: result.url,
@@ -229,13 +268,14 @@ async function main() {
 
   console.log(`      Remembered: "${article.title}"`);
 
+  const categoryLine = `\nCategory: ${category.id} (${category.label})`;
   const imageNote = hosted.hero || hosted.sections.length > 0
     ? `\nImages: ${1 + hosted.sections.length} hosted on jsDelivr from the images/ folder.`
     : '\nImages: none this time.';
 
   done(
     (config.isDraft ? 'DRAFT saved. ' : 'POST PUBLISHED. ') +
-      `Topic: ${topic}\n` +
+      `Topic: ${topic}${categoryLine}\n` +
       `URL: ${result.url || '(draft has no public URL yet)'}${imageNote}\n\n` +
       (config.isDraft
         ? 'Open Blogger > Posts > Drafts to read it.'

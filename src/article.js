@@ -118,7 +118,21 @@ export function countArticleWords(article) {
  * @param {{ topic: string, angle?: string, niche: string, language: string }} params
  * @returns {Promise<object>} the validated article
  */
-export async function generateArticle({ topic, angle = '', niche, language }) {
+export async function generateArticle({ topic, angle = '', category = null, niche, language, today = '', newsHeadlines = [] }) {
+  const categoryLine = category
+    ? `Category: ${category.label}\nWhat it covers: ${category.description}\nWho it is for: ${category.audience}\n`
+    : '';
+
+  const todayLine = today ? `Today's date: ${today}\n` : '';
+
+  // Real headlines, if we have them. The article may lean on these for
+  // current examples, but must not invent facts beyond them.
+  const newsLine = newsHeadlines.length
+    ? `\nReal current stories (use only if directly relevant):\n` +
+      newsHeadlines.map((item, i) => `${i + 1}. ${item.title}`).join('\n') +
+      `\n`
+    : '';
+
   const systemPrompt =
     `You are a careful blog writer for a beginner-friendly blog. Niche: ${niche}. ` +
     `You write in ${language}. You never invent facts, numbers or statistics.`;
@@ -127,7 +141,7 @@ export async function generateArticle({ topic, angle = '', niche, language }) {
 
 Topic: ${topic}
 ${angle ? `Angle: ${angle}` : ''}
-
+${categoryLine}${todayLine}${newsLine}
 Rules:
 - Length: 800 to 950 words in total. This matters, so actually count as you write. Do NOT come in under 700 words.
 - Structure: 4 to 5 sections, each with a short clear heading.

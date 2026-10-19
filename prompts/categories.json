@@ -1,0 +1,116 @@
+{
+  "_howToEdit": "Blogger Agent ki category file. Ise aap freely edit kar sakte hain. Rules: (1) category 'id' change mat karna, warna purane posts ka link toot jayega. (2) 'labels' wahi words use karein jo _fixedLabels me hain. (3) image_style aur diagram_usage wahi hain jo AI ko batate hain ki kaisi image/diagram banani hai. Is file me comment nahi likh sakte (JSON rule), isliye '_' se shuru hone wale fields sirf notes hain aur code inhe category samajhta nahi.",
+
+  "_fixedLabels": [
+    "AI Updates",
+    "Digital Marketing",
+    "Vibe Coding",
+    "SEO",
+    "Social Media",
+    "AI Tools",
+    "Prompt Engineering",
+    "Beginners"
+  ],
+
+  "categories": [
+    {
+      "id": "ai_updates",
+      "label": "AI Updates",
+      "enabled": true,
+
+      "description": "New AI models, features, tools and launches, and what they actually mean for a beginner or a creator. Write about what changed, why it matters, and what to do about it.",
+
+      "audience": "Beginners and creators who want to keep up with AI without drowning in jargon.",
+
+      "example_topics": [
+        "A new AI image tool launched - what it does and who it is for",
+        "OpenAI or Anthropic released an update - here is what changed for you",
+        "A free AI model became available - is it worth switching?",
+        "An AI coding tool added a feature - here is how to use it"
+      ],
+
+      "never_cover": "Celebrity gossip, political drama, funding roundup drama, or general technology news that has nothing to do with AI.",
+
+      "news_based": true,
+      "evergreen_fallback": "how to use a well known AI tool for a specific everyday task, explained step by step. Never claim it is new.",
+
+      "image_style": "If the topic is about a chatbot or assistant, show a modern chat interface on a laptop or phone screen. If it is about a model or tool launch, show a clean futuristic illustration of AI or a neural network. Never draw logos, brand marks or real people's faces.",
+
+      "image_subject_examples": [
+        "an AI assistant conversation on a laptop screen",
+        "abstract neural network with glowing connected nodes",
+        "a phone showing a clean AI chat app"
+      ],
+
+      "diagram_usage": "Only when the news explains a workflow or a pipeline, for example how a request travels through a new feature. Otherwise skip the diagram."
+    },
+
+    {
+      "id": "digital_marketing",
+      "label": "Digital Marketing",
+      "enabled": true,
+
+      "description": "SEO, social media, content marketing, email marketing, ads, analytics and funnels, including how to use AI tools for all of these. Practical, step-by-step, aimed at people who run their own site or business.",
+
+      "audience": "Beginners, small business owners, freelancers and first-time bloggers who want steady traffic and leads.",
+
+      "example_topics": [
+        "How to do keyword research for a blog post from scratch",
+        "A simple SEO checklist you can run on every page",
+        "How to plan one month of social media content",
+        "Using an AI tool to write email newsletters faster",
+        "How to set up a simple marketing funnel for a small blog"
+      ],
+
+      "never_cover": "Celebrity endorsements, get-rich-quick schemes, specific paid ad budget advice, or guaranteed-traffic promises.",
+
+      "news_based": false,
+      "evergreen_fallback": "not needed, this category is always evergreen practical content.",
+
+      "image_style": "Marketing dashboards, growth graphs, a social media content planning board, a marketing funnel illustration, or the concept of search results and ranking. Clean, modern, editorial. No logos or real faces.",
+
+      "image_subject_examples": [
+        "analytics dashboard with line and bar charts",
+        "a marketing funnel drawn in flat illustration",
+        "a content calendar board with posts",
+        "search results page concept with a highlighted top result"
+      ],
+
+      "diagram_usage": "Yes, this is the main category for diagrams. Good subjects: the marketing funnel (Awareness to Interest to Decision to Action), the SEO process, the content workflow, the email funnel."
+    },
+
+    {
+      "id": "vibe_coding",
+      "label": "Vibe Coding",
+      "enabled": true,
+
+      "description": "Building apps and websites by prompting AI coding tools. Covers Cursor, Claude Code, OpenCode, Lovable, Bolt and similar tools, AI-assisted coding workflows, prompt tips, and small beginner projects that actually work.",
+
+      "audience": "Beginners who want to build a small app or website by describing it to an AI, without learning everything first.",
+
+      "example_topics": [
+        "How to build a simple to-do app by prompting an AI coding tool",
+        "Cursor vs Claude Code vs Lovable - which one to start with",
+        "Prompt tips that make AI write better code",
+        "How to add a login page to your app with AI help",
+        "Fixing errors in AI generated code without knowing everything"
+      ],
+
+      "never_cover": "Enterprise architecture debates, salary or job market commentary, or advanced backend engineering theory aimed at senior developers.",
+
+      "news_based": false,
+      "evergreen_fallback": "not needed, this category is always evergreen practical content.",
+
+      "image_style": "A developer desk with a laptop or monitor showing a code editor with an AI assistant panel, terminal windows, and the app being built. Blurred or unreadable code is fine. Clean modern editorial look. No logos, no real faces.",
+
+      "image_subject_examples": [
+        "laptop showing a code editor with an AI chat panel beside it",
+        "two monitors, one with code one with a terminal",
+        "a phone and laptop showing a simple app being built",
+        "a clean developer desk with keyboard and notebook"
+      ],
+
+      "diagram_usage": "Yes when useful. Good subjects: the prompt-to-app workflow, how an AI coding tool turns a description into files, the debug loop."
+    }
+  ]
+}

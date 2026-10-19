@@ -65,6 +65,16 @@ export function hasLivePostForDate(date, entries = readPosted()) {
   return entries.some((entry) => entry?.date === date && entry?.draft === false);
 }
 
+/**
+ * Titles already used in the SAME category. Used to keep a category
+ * from circling back to the same idea next time it comes up.
+ */
+export function getTitlesForCategory(categoryId, entries = readPosted()) {
+  return entries
+    .filter((entry) => entry?.category === categoryId && typeof entry?.title === 'string')
+    .map((entry) => entry.title.trim());
+}
+
 /** Adds one entry at the end and saves the file. */
 export function addEntry(entry) {
   const entries = readPosted();
@@ -77,7 +87,7 @@ export function addEntry(entry) {
  * Last N published titles, newest first. Sent to Groq so it does
  * not suggest a topic we already covered.
  */
-export function getRecentTitles(limit = 30, entries = readPosted()) {
+export function getRecentTitles(limit = 40, entries = readPosted()) {
   return entries
     .filter((entry) => typeof entry?.title === 'string' && entry.title.trim())
     .slice(-limit)

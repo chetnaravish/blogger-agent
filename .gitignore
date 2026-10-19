@@ -17,5 +17,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ---- Logs ----
+# ---- Logs / local caches ----
 *.log
+news-cache.json
+tmp-*.mjs
