@@ -23,6 +23,13 @@ on:
         default: "true"
         type: string
 
+  # Pushing a change to THIS FILE runs the agent once. That is handy for
+  # testing: edit the workflow, push, and the run starts by itself.
+  # Normal code pushes do NOT trigger anything.
+  push:
+    paths:
+      - ".github/workflows/daily-blog.yml"
+
 # Two runs must never fight over the same posted.json.
 concurrency:
   group: daily-blog
