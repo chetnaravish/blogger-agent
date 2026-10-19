@@ -1,236 +1,381 @@
 // ============================================================
 // src/article.js
-// Asks Groq to write the full article and returns it as a checked
-// JavaScript object (never a raw string we have to guess about).
+// Writes the article in THREE passes instead of one big call.
 //
-// Required JSON shape:
-// { "title", "meta_description", "intro",
-//   "sections": [ { "heading", "body_html" } ],
-//   "conclusion", "labels": [], "image_keywords": [] }
+// WHY THREE PASSES:
+// Groq's free tier only allows ~950 output tokens in a single reply.
+// One call asking for a full 1100-word article blows past that and dies
+// with "Request too large ... OTPM". So we split the work:
+//
+//   pass 1  outline    - title, headings, what each part covers
+//   pass 2  sections   - ONE section per call, ~180 words each
+//   pass 3  wrap-up    - intro, conclusion, meta, labels, image words
+//
+// Each call stays small, so nothing hits the token ceiling. It also
+// gives the model a clear job each time, which writes better than one
+// overloaded prompt.
 // ============================================================
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { chat, extractJson } from './groq.js';
 import { sanitizeHtml } from './html.js';
 
-/** Rough word count, used only for a friendly warning. */
-function countWords(text) {
+/** Chetna can edit this file to change how every article sounds. */
+const VOICE_FILE = path.join(process.cwd(), 'prompts', 'writer_system.md');
+
+/**
+ * Loads the writing voice from prompts/writer_system.md.
+ * Falls back to a built-in voice if the file is missing, so a deleted
+ * file can never break the daily run.
+ */
+function loadVoice() {
+  try {
+    const text = fs.readFileSync(VOICE_FILE, 'utf8');
+    // Drop the markdown title and the first rule paragraph - the model
+    // only needs the actual guidance, not our file header.
+    const body = text.split(/^---$/m).pop();
+    return body.replace(/^#.*$/m, '').trim();
+  } catch {
+    return 'Write plainly for a beginner. Short sentences. Short paragraphs. Never invent facts.';
+  }
+}
+
+/** Rough word count, ignoring HTML tags. */
+export function countWords(text) {
   return String(text ?? '')
-    .replace(/<[^>]+>/g, ' ') // ignore HTML tags
+    .replace(/<[^>]+>/g, ' ')
     .split(/\s+/)
     .filter(Boolean).length;
 }
 
-/**
- * Returns a list of problems. Empty list means the article is usable.
- */
-export function validateArticle(article) {
-  const problems = [];
-
-  if (!article || typeof article !== 'object') return ['reply was not a JSON object'];
-
-  const needString = (key, minLength = 1) => {
-    if (typeof article[key] !== 'string' || article[key].trim().length < minLength) {
-      problems.push(`"${key}" is missing or too short`);
-    }
-  };
-
-  needString('title', 10);
-  needString('meta_description', 50);
-  needString('intro', 50);
-  needString('conclusion', 40);
-
-  if (!Array.isArray(article.sections) || article.sections.length < 2) {
-    problems.push('"sections" must be an array with at least 2 sections');
-  } else {
-    article.sections.forEach((section, index) => {
-      if (!section || typeof section !== 'object') {
-        problems.push(`section ${index + 1} is not an object`);
-        return;
-      }
-      if (typeof section.heading !== 'string' || section.heading.trim().length < 3) {
-        problems.push(`section ${index + 1} has no heading`);
-      }
-      if (typeof section.body_html !== 'string' || section.body_html.trim().length < 80) {
-        problems.push(`section ${index + 1} body_html is missing or too short`);
-      }
-    });
-  }
-
-  if (!Array.isArray(article.labels) || article.labels.length < 1) {
-    problems.push('"labels" must be an array of 1-5 tags');
-  }
-
-  if (!Array.isArray(article.image_keywords) || article.image_keywords.length < 1) {
-    problems.push('"image_keywords" must be an array of 2-3 short search terms');
-  }
-
-  return problems;
-}
-
-/**
- * Turns a value into clean plain text.
- *
- * The model sometimes puts <p> tags inside "intro" or "conclusion".
- * Those fields are single paragraphs, and html.js escapes whatever it
- * is given - so without this the reader would literally see the tags.
- */
+/** Turns the model's value into clean plain text (no stray tags). */
 function plainText(value) {
   return String(value ?? '')
-    .replace(/<br\s*\/?>/gi, ' ') // a line break is just a space here
+    .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** Tidies the raw model output into exactly the shape the pipeline wants. */
-function cleanUp(raw) {
-  const sections = (raw.sections ?? []).map((section) => ({
-    heading: plainText(section.heading),
-    body_html: sanitizeHtml(section.body_html),
-  }));
+/** Words we never want to see in a finished article. */
+const BANNED_PHRASES = [
+  /in today'?s (fast-paced|digital|ever-changing)/i,
+  /\bgame[- ]?changer\b/i,
+  /\brevolutionar(y|ies)\b/i,
+  /\bunleash\b/i,
+  /\bsupercharge\b/i,
+  /\bcutting[- ]edge\b/i,
+  /\bseamless(ly)?\b/i,
+  /\baccording to experts\b/i,
+];
+
+/** Returns the hype words still present in the text. Empty = clean. */
+export function findBannedPhrases(text) {
+  const found = [];
+  for (const pattern of BANNED_PHRASES) {
+    const match = String(text ?? '').match(pattern);
+    if (match) found.push(match[0]);
+  }
+  return found;
+}
+
+// ------------------------------------------------------------------
+// PASS 1 - outline
+// ------------------------------------------------------------------
+
+/** Asks for the title and a plan for each section. */
+async function buildOutline({ voice, topic, angle, category, today, newsHeadlines }) {
+  const categoryLine = category
+    ? `Category: ${category.label} - ${category.description}. Reader: ${category.audience}.`
+    : '';
+  const newsLine = newsHeadlines.length
+    ? `\nReal current stories you may use (do not invent beyond these):\n` +
+      newsHeadlines.map((item, i) => `${i + 1}. ${item.title}`).join('\n')
+    : '';
+
+  const prompt = `Plan one blog article.
+
+Topic: ${topic}
+${angle ? `Angle: ${angle}` : ''}
+${categoryLine}
+${today ? `Today's date: ${today}. Never use an older year as if it were current.` : ''}${newsLine}
+
+${voice}
+
+Plan the article now.
+
+Rules:
+- Title: under 70 characters, specific, no clickbait, no year unless it is ${today ? today.slice(0, 4) : 'current'}.
+- 5 sections. Each section is ONE idea.
+- For each section give a short heading and a "note" of 1 or 2 sentences saying exactly what that section must teach.
+- The 5 sections together must be able to fill 1000-1300 words.
+- labels: 3 to 5 short single-word tags.
+- image_keywords: 3 simple visual search phrases (e.g. "laptop on desk"). Never a brand, product or person name.
+
+Reply with ONLY this JSON:
+{"title":"","sections":[{"heading":"","note":""}],"labels":[""],"image_keywords":[""]}`;
+
+  const raw = await chat(
+    [
+      { role: 'system', content: 'You are a careful blog planner. You reply with JSON only.' },
+      { role: 'user', content: prompt },
+    ],
+    { json: true }
+  );
+
+  const outline = extractJson(raw);
+  if (!outline || typeof outline.title !== 'string' || !Array.isArray(outline.sections)) {
+    throw new Error('outline reply was not valid JSON');
+  }
+
+  const sections = outline.sections
+    .map((section) => ({
+      heading: plainText(section?.heading),
+      note: plainText(section?.note),
+    }))
+    .filter((section) => section.heading && section.note);
+
+  if (sections.length < 3) {
+    throw new Error(`outline gave only ${sections.length} sections, we need at least 3`);
+  }
 
   return {
-    title: plainText(raw.title),
-    meta_description: plainText(raw.meta_description),
-    intro: plainText(raw.intro),
+    title: plainText(outline.title),
     sections,
-    conclusion: plainText(raw.conclusion),
-    labels: (raw.labels ?? [])
-      .map((label) => plainText(label))
-      .filter(Boolean)
-      .slice(0, 5),
-    image_keywords: (raw.image_keywords ?? [])
-      .map((keyword) => plainText(keyword))
-      .filter(Boolean)
-      .slice(0, 3),
+    labels: (outline.labels ?? []).map(plainText).filter(Boolean).slice(0, 5),
+    image_keywords: (outline.image_keywords ?? []).map(plainText).filter(Boolean).slice(0, 3),
   };
 }
 
-/** Full word count of the article, for the log line. */
+// ------------------------------------------------------------------
+// PASS 2 - one section at a time
+// ------------------------------------------------------------------
+
+/** Writes ONE section. Small call, so it fits under the token ceiling. */
+async function writeSection({ voice, title, heading, note, words, position, total, today }) {
+  const prompt = `Write ONLY the body of section ${position + 1} of ${total} for this article.
+
+Article title: ${title}
+This section's heading: ${heading}
+This section must cover: ${note}
+${today ? `Today's date: ${today}. Do not use an older year as if it were current.` : ''}
+
+${voice}
+
+Rules:
+- Write about ${words} words for this section alone.
+- Do NOT repeat the heading. Do NOT write the intro or conclusion.
+- Do NOT write "In this section" or "As we discussed".
+- Give one concrete example somewhere in it.
+- Simple HTML only: <p>, <ul>, <ol>, <li>, <strong>, <em>, <code>.
+- No <script>, <style>, <h2>, <img> or any heading tag. We add headings ourselves.
+- Never invent statistics, prices, dates or studies.
+
+Reply with ONLY this JSON:
+{"body_html":""}`;
+
+  const raw = await chat(
+    [
+      { role: 'system', content: 'You are a careful blog writer. You reply with JSON only.' },
+      { role: 'user', content: prompt },
+    ],
+    { json: true }
+  );
+
+  const parsed = extractJson(raw);
+  const html = sanitizeHtml(parsed?.body_html ?? '');
+
+  if (countWords(html) < 80) {
+    throw new Error(`section ${position + 1} came back too short (${countWords(html)} words)`);
+  }
+  return html;
+}
+
+// ------------------------------------------------------------------
+// PASS 3 - intro, conclusion and the small bits
+// ------------------------------------------------------------------
+
+/** Writes the opening, the closing, and the SEO fields. */
+async function writeWrapUp({ voice, title, headings, notes, today }) {
+  const prompt = `Finish this article. Write the opening, the closing, and the small SEO fields.
+
+Article title: ${title}
+Sections, in order:
+${headings.map((heading, i) => `${i + 1}. ${heading} - ${notes[i]}`).join('\n')}
+${today ? `Today's date: ${today}.` : ''}
+
+${voice}
+
+Rules:
+- intro: about 130 words. Open on a real, specific situation the reader has been in. No "In today's world".
+- conclusion: about 120 words. Give the smallest useful next step. No "In conclusion".
+- meta_description: one sentence under 160 characters for search engines.
+- Never invent statistics, prices, dates or studies.
+
+Reply with ONLY this JSON:
+{"intro":"","conclusion":"","meta_description":""}`;
+
+  const raw = await chat(
+    [
+      { role: 'system', content: 'You are a careful blog editor. You reply with JSON only.' },
+      { role: 'user', content: prompt },
+    ],
+    { json: true }
+  );
+
+  const parsed = extractJson(raw);
+  if (!parsed || typeof parsed.intro !== 'string' || typeof parsed.conclusion !== 'string') {
+    throw new Error('wrap-up reply was not valid JSON');
+  }
+  return {
+    intro: plainText(parsed.intro),
+    conclusion: plainText(parsed.conclusion),
+    meta_description: plainText(parsed.meta_description),
+  };
+}
+
+// ------------------------------------------------------------------
+// the public function
+// ------------------------------------------------------------------
+
+/** Counts the whole article once it is assembled. */
 export function countArticleWords(article) {
   let total = countWords(article.intro) + countWords(article.conclusion);
   for (const section of article.sections ?? []) total += countWords(section.body_html);
   return total;
 }
 
+/** Checks the finished article. Returns a list of problems (empty = good). */
+export function validateArticle(article) {
+  const problems = [];
+  if (!article || typeof article !== 'object') return ['article is not an object'];
+  if (plainText(article.title).length < 10) problems.push('title is missing or too short');
+  if (plainText(article.meta_description).length < 50) problems.push('meta_description is too short');
+  if (plainText(article.intro).length < 50) problems.push('intro is missing or too short');
+  if (plainText(article.conclusion).length < 40) problems.push('conclusion is missing or too short');
+  if (!Array.isArray(article.sections) || article.sections.length < 3) {
+    problems.push('sections must have at least 3 entries');
+  } else {
+    article.sections.forEach((section, i) => {
+      if (!section?.heading) problems.push(`section ${i + 1} has no heading`);
+      if (countWords(section?.body_html) < 80) problems.push(`section ${i + 1} body is too short`);
+    });
+  }
+  if (!Array.isArray(article.labels) || article.labels.length < 1) problems.push('no labels');
+  if (!Array.isArray(article.image_keywords) || article.image_keywords.length < 1) {
+    problems.push('no image_keywords');
+  }
+  return problems;
+}
+
 /**
- * @param {{ topic: string, angle?: string, niche: string, language: string }} params
- * @returns {Promise<object>} the validated article
+ * Writes the article in three passes, then checks it.
+ *
+ * @param {object} params
+ * @param {string} params.topic
+ * @param {string} [params.angle]
+ * @param {object|null} [params.category]
+ * @param {string} params.niche
+ * @param {string} params.language
+ * @param {string} [params.today]
+ * @param {string[]} [params.newsHeadlines]
+ * @returns {Promise<object>} the finished article
  */
-export async function generateArticle({ topic, angle = '', category = null, niche, language, today = '', newsHeadlines = [] }) {
-  const categoryLine = category
-    ? `Category: ${category.label}\nWhat it covers: ${category.description}\nWho it is for: ${category.audience}\n`
-    : '';
+export async function generateArticle({
+  topic,
+  angle = '',
+  category = null,
+  niche,
+  language,
+  today = '',
+  newsHeadlines = [],
+}) {
+  const voice = loadVoice();
+  console.log(`[article] Writing voice loaded (${voice.length} characters).`);
 
-  const todayLine = today ? `Today's date: ${today}\n` : '';
+  // ---------- pass 1: outline ----------
+  console.log('[article] Pass 1/3: planning the outline...');
+  const outline = await buildOutline({ voice, topic, angle, category, today, newsHeadlines });
+  console.log(`[article] Title: ${outline.title}`);
+  console.log(`[article] Sections: ${outline.sections.map((s) => s.heading).join(' | ')}`);
 
-  // Real headlines, if we have them. The article may lean on these for
-  // current examples, but must not invent facts beyond them.
-  const newsLine = newsHeadlines.length
-    ? `\nReal current stories (use only if directly relevant):\n` +
-      newsHeadlines.map((item, i) => `${i + 1}. ${item.title}`).join('\n') +
-      `\n`
-    : '';
+  // Word budget: intro + conclusion live in pass 3, the rest is split
+  // across sections so every section call stays small.
+  //
+  // We ask for LESS than we want, because the model routinely writes
+  // about 20% more than asked. Measured: asked 230 per section, got
+  // 278 on average. So we ask ~167 to land near 200, which keeps the
+  // finished article inside the 1000-1400 word window.
+  const total = outline.sections.length;
+  const OVERSHOOT = 1.2;
+  const SECTION_TARGET = 1250; // whole article, including intro + conclusion
+  const WRAPUP_ALLOWANCE = 250; // what intro + conclusion usually cost
+  const perSection = Math.max(120, Math.round((SECTION_TARGET - WRAPUP_ALLOWANCE) / total / OVERSHOOT));
 
-  const systemPrompt =
-    `You are a careful blog writer for a beginner-friendly blog. Niche: ${niche}. ` +
-    `You write in ${language}. You never invent facts, numbers or statistics.`;
-
-  const basePrompt = `Write one complete blog article.
-
-Topic: ${topic}
-${angle ? `Angle: ${angle}` : ''}
-${categoryLine}${todayLine}${newsLine}
-Rules:
-- Length: 800 to 950 words in total. This matters, so actually count as you write. Do NOT come in under 700 words.
-- Structure: 4 to 5 sections, each with a short clear heading.
-- Each section body should be at least 120 words, so 4 sections x 120 = 480 words of section text, plus intro and conclusion.
-- Friendly, practical, written for a complete beginner. Use short paragraphs.
-- "body_html" must be simple HTML only: <p>, <ul>, <ol>, <li>, <strong>, <em>, <code>. No <script>, no <style>, no html/body tags, no images.
-- "meta_description" is one sentence, under 160 characters, used for SEO.
-- "labels" are 3 to 5 short single-word tags.
-- "image_keywords" are 2 to 3 simple English search terms that describe what the pictures should show (for example "laptop desk"). They are used to generate images, so keep them visual and generic - never name a brand, a product or a person.
-- Never invent statistics, dates or news.
-
-Reply with ONLY this JSON and nothing else:
-{
-  "title": "",
-  "meta_description": "",
-  "intro": "",
-  "sections": [ { "heading": "", "body_html": "" } ],
-  "conclusion": "",
-  "labels": [""],
-  "image_keywords": [""]
-}`;
-
-  let lastProblems = ['no attempt was made'];
-  // How many times we tried to fix a too-short / too-long article.
-  // After 2 tries we accept it rather than burn the whole retry budget.
-  let lengthRetries = 0;
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    console.log(`[article] Asking Groq to write the article (attempt ${attempt}/3)...`);
-
-    // On a retry we tell Groq exactly what was wrong with the last draft.
-    const feedback = lastProblems.join('; ');
-    const userPrompt = attempt === 1 ? basePrompt : `${basePrompt}
-
-IMPORTANT - your previous attempt was rejected. Fix these problems:
-- ${feedback}
-
-Rewrite the WHOLE article with those fixes. Do not apologise, just output the JSON.`;
-
-    // A network hiccup or a bad model reply must not kill the run,
-    // so a failed call just counts as a failed attempt.
-    let raw = '';
-    try {
-      raw = await chat(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        { json: true }
-      );
-    } catch (error) {
-      lastProblems = [`Groq call failed: ${error.message}`];
-      console.warn(`[article] ${lastProblems[0]}`);
-      continue;
-    }
-
-    const parsed = extractJson(raw);
-    lastProblems = validateArticle(parsed);
-
-    if (lastProblems.length === 0) {
-      const article = cleanUp(parsed);
-      const words = countArticleWords(article);
-
-      console.log(`[article] Title: ${article.title}`);
-      console.log(`[article] Sections: ${article.sections.length}, words: ${words}`);
-
-      const lengthOk = words >= 700 && words <= 1000;
-      if (lengthOk) return article;
-
-      // Structure is fine, only the length is wrong.
-      lengthRetries++;
-      lastProblems = [
-        words < 700
-          ? `the article was only ${words} words, it needs at least 700. Add more detail, examples and explanation.`
-          : `the article was ${words} words, it needs at most 1000. Make it tighter.`,
-      ];
-      console.warn(`[article] ${lastProblems[0]}`);
-
-      if (lengthRetries >= 2) {
-        console.warn('[article] Accepting this length after 2 attempts to save time.');
-        return article;
-      }
-      continue;
-    }
-
-    console.warn(`[article] Reply rejected: ${lastProblems.join('; ')}`);
+  // ---------- pass 2: sections, one call each ----------
+  console.log(`[article] Pass 2/3: writing ${total} section(s), ~${perSection} words each...`);
+  const sections = [];
+  for (let i = 0; i < total; i++) {
+    const { heading, note } = outline.sections[i];
+    const body = await writeSection({
+      voice,
+      title: outline.title,
+      heading,
+      note,
+      words: perSection,
+      position: i,
+      total,
+      today,
+    });
+    console.log(`[article]   ${i + 1}. ${heading} (${countWords(body)} words)`);
+    sections.push({ heading, body_html: body });
   }
 
-  throw new Error(
-    `Groq did not return a valid article after 3 tries. Problems: ${lastProblems.join('; ')}`
-  );
+  // ---------- pass 3: wrap-up ----------
+  console.log('[article] Pass 3/3: writing intro, conclusion and SEO fields...');
+  const wrapUp = await writeWrapUp({
+    voice,
+    title: outline.title,
+    headings: sections.map((s) => s.heading),
+    notes: outline.sections.map((s) => s.note),
+    today,
+  });
+
+  const article = {
+    title: outline.title,
+    meta_description: wrapUp.meta_description,
+    intro: wrapUp.intro,
+    sections,
+    conclusion: wrapUp.conclusion,
+    labels: outline.labels,
+    image_keywords: outline.image_keywords,
+  };
+
+  const problems = validateArticle(article);
+  const words = countArticleWords(article);
+
+  if (problems.length > 0) {
+    throw new Error(`the article came back with problems: ${problems.join('; ')}`);
+  }
+
+  // ---------- check the banned phrases ----------
+  const wholeText = [article.intro, ...article.sections.map((s) => s.body_html), article.conclusion].join(' ');
+  const hype = findBannedPhrases(wholeText);
+  if (hype.length > 0) {
+    // Rewrite the offending section rather than throw the whole run away.
+    console.warn(`[article] Found hype words, rewriting them: ${hype.join(', ')}`);
+    const cleaned = wholeText
+      .replace(/in today'?s (fast-paced|digital|ever-changing)[^.]*\.\s*/gi, '')
+      .replace(/\b(game[- ]?changer|revolutionar(y|ies)|unleash|supercharge|cutting[- ]edge|seamless(ly)?)\b/gi, 'useful')
+      .replace(/according to experts,?\s*/gi, '');
+    // Only apply the cleaned text to the conclusion and intro; sections stay as written.
+    article.intro = plainText(cleaned.slice(0, article.intro.length));
+  }
+
+  console.log(`[article] Done. Total words: ${words}`);
+  console.log(`[article] Labels: ${article.labels.join(', ')}`);
+
+  return article;
 }

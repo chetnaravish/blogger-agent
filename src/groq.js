@@ -79,20 +79,48 @@ function isJsonValidationProblem(error) {
 }
 
 /**
- * True when Groq refused because our max_tokens was bigger than the
- * per-minute OUTPUT limit it enforces right now.
+ * Reads the output-token cap, ONLY from the "Request too large" form.
  *
- * The advertised max_completion_tokens on /models is NOT the same thing.
- * qwen/qwen3.8-27b advertises 16384 but only hands out 1000 output
- * tokens per minute on the free tier. So we learn the real number from
- * this error and remember it.
+ * Groq sends two different 429s that both mention OTPM, and they need
+ * opposite handling:
+ *
+ *   1. "Request too large ... Requested 1469"
+ *      -> our max_tokens was bigger than the cap. Shrink the request.
+ *
+ *   2. "Rate limit reached ... Used 991 ... try again in 12.48s"
+ *      -> the request is fine, the minute window is simply full.
+ *         Shrinking would not help; we have to WAIT.
+ *
+ * The advertised max_completion_tokens on /models is also not the same
+ * thing - qwen advertises 16384 but only hands out 1000 output tokens
+ * per minute on the free tier. So we learn the real number from the
+ * error and remember it.
  */
 function readOutputCapFromError(error) {
   const text = `${error?.body ?? ''} ${error?.message ?? ''}`;
-  const match = text.match(/output tokens per minute \(OTPM\):\s*Limit\s*(\d+)/i);
+  if (!/request too large/i.test(text)) return null; // form 2 is NOT a size problem
+  const match = text.match(/Limit\s*(\d+)/i);
   if (!match) return null;
   // Leave a little room so we never sit exactly on the limit.
   return Math.max(200, Number(match[1]) - 50);
+}
+
+/**
+ * Reads "try again in 12.4799s" from a rate-limit complaint.
+ * Returns seconds, or null when Groq did not say.
+ */
+function readRetryAfterSeconds(error) {
+  const text = `${error?.body ?? ''} ${error?.message ?? ''}`;
+  const match = text.match(/try again in\s*([\d.]+)\s*s/i);
+  if (!match) return null;
+  // Round up and add a small cushion so we do not hit the same wall twice.
+  return Math.ceil(Number(match[1])) + 3;
+}
+
+/** True when this is the "the minute window is full" form, not the size form. */
+function isTokenWindowFull(error) {
+  const text = `${error?.body ?? ''} ${error?.message ?? ''}`;
+  return /rate limit reached/i.test(text) && /output tokens per minute/i.test(text);
 }
 
 /** GET /models - list of every model Groq offers right now. */
