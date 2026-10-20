@@ -64,6 +64,53 @@ export function shouldShowPortfolio(dateString) {
   return day % 2 === 1;
 }
 
+/**
+ * Reads --topic="Some subject" from the command line.
+ *
+ *   npm run post -- --topic="What is vibe coding"
+ *   npm run post -- --topic What is vibe coding   (space form)
+ *
+ * When it is given, Step 2 skips the topic picker and the judge and
+ * writes about exactly this. Useful for testing one idea on demand.
+ *
+ * @param {string[]} [argv]
+ * @returns {string} '' when the flag was not used
+ */
+export function parseTopicOverride(argv = process.argv.slice(2)) {
+  const args = argv.map(String);
+  for (let i = 0; i < args.length; i++) {
+    const equals = args[i].match(/^--topic=(.*)$/i);
+    if (equals && equals[1].trim()) return equals[1].trim();
+    if (/^--topic$/i.test(args[i]) && args[i + 1] && !args[i + 1].startsWith('--')) {
+      return args[i + 1].trim();
+    }
+  }
+  return '';
+}
+
+/**
+ * Reads --portfolio=on | --portfolio=off from the command line.
+ *
+ * The daily rule (odd date = on, even = off) still applies when this
+ * flag is missing. The flag only exists so one test run can show the
+ * portfolio box on a day the rule would have skipped it.
+ *
+ * @param {string[]} [argv]
+ * @returns {boolean|null} null = no flag, use the date rule
+ */
+export function parsePortfolioOverride(argv = process.argv.slice(2)) {
+  const args = argv.map(String);
+  for (let i = 0; i < args.length; i++) {
+    const raw =
+      args[i].match(/^--portfolio=(.*)$/i)?.[1] ??
+      (/^--portfolio$/i.test(args[i]) ? args[i + 1] : '');
+    const value = String(raw ?? '').toLowerCase().trim();
+    if (value === 'on' || value === 'true' || value === '1') return true;
+    if (value === 'off' || value === 'false' || value === '0') return false;
+  }
+  return null;
+}
+
 /** Everything is optional except the secrets, so check the essentials. */
 function requireKeys(config) {
   const required = [
@@ -144,27 +191,46 @@ async function main() {
   // is grounded in what actually happened, not the model's old memory.
   const news = await getNewsHeadlines({ category, count: 8 });
 
-  const { topic, angle, judgeReason, attempts } = await generateTopic({
-    category,
-    recentTitles,
-    language: config.language,
-    isNewsBased: category.news_based === true,
-    newsHeadlines: news.headlines,
-    today,
-  });
+  // --topic="..." writes about exactly that subject, skipping the
+  // picker and the judge. No flag = normal daily behaviour.
+  const topicOverride = parseTopicOverride();
+  let topic;
+  let angle = '';
+  let judgeReason = 'forced with --topic';
+  let attempts = 0;
 
-  console.log(`      Category used ${attempts} attempt(s), judge said: "${judgeReason}"`);
+  if (topicOverride) {
+    topic = topicOverride;
+    console.log(`      Topic forced: "${topic}" (topic picker skipped)`);
+  } else {
+    ({ topic, angle, judgeReason, attempts } = await generateTopic({
+      category,
+      recentTitles,
+      language: config.language,
+      isNewsBased: category.news_based === true,
+      newsHeadlines: news.headlines,
+      today,
+    }));
+    console.log(`      Category used ${attempts} attempt(s), judge said: "${judgeReason}"`);
+  }
 
   // ---- Step 3: article -----------------------------------------
   step(3, 'Writing the article');
 
-  // The portfolio link goes in on alternate days only.
-  const showPortfolio = shouldShowPortfolio(today) && Boolean(config.portfolioUrl);
+  // The portfolio link goes in on alternate days only. --portfolio=on/off
+  // lets one test run show it on a day the rule would skip.
+  const portfolioOverride = parsePortfolioOverride();
+  const showPortfolio =
+    (portfolioOverride !== null ? portfolioOverride : shouldShowPortfolio(today)) &&
+    Boolean(config.portfolioUrl);
   console.log(
     showPortfolio
       ? `      Portfolio link: ON for ${today}`
       : `      Portfolio link: OFF for ${today} (alternate-day rule)`
   );
+  if (portfolioOverride !== null) {
+    console.log(`      (forced with --portfolio=${portfolioOverride ? 'on' : 'off'})`);
+  }
 
   const article = await generateArticle({
     topic,
