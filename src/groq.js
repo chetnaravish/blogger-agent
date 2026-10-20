@@ -299,12 +299,21 @@ export async function chat(messages, options = {}) {
   // code fences and surrounding prose well enough.
   let useJsonMode = wantsJson;
   let plainModeHinted = false;
-  let attemptsLeft = wantsJson ? 3 : 2;
+  let attemptsLeft = wantsJson ? 4 : 3;
+
+  // Connection drops get their OWN budget. Otherwise one OTPM wait plus
+  // one connect timeout used to eat all three attempts and fail a run
+  // that would have worked on the next try. A dropped socket tells us
+  // nothing about whether the reply was good.
+  let networkRetriesLeft = 3;
 
   let lastError = null;
 
-  while (attemptsLeft > 0) {
-    attemptsLeft--;
+  while (attemptsLeft > 0 || networkRetriesLeft > 0) {
+    if (networkRetriesLeft <= 0 && lastError && !lastError.status) {
+      throw new Error(describeNetworkError(lastError));
+    }
+    if (attemptsLeft > 0) attemptsLeft--;
 
     await respectRateLimit();
 
@@ -399,11 +408,17 @@ export async function chat(messages, options = {}) {
       // Never retry these, they will always fail.
       if (error.status === 401 || !error.status) {
         const isNetwork = !error.status;
-        if (isNetwork && attemptsLeft > 0) {
+        if (isNetwork && networkRetriesLeft > 0) {
           // fetch failed / socket hang up / timeout. Usually a dropped
           // connection, often from the per-minute token limit.
-          const waitSeconds = 20;
-          console.warn(`[groq] ${describeNetworkError(error)}. Waiting ${waitSeconds}s and retrying...`);
+          networkRetriesLeft--;
+          // Wait longer each time - a connect timeout often clears in a
+          // minute or two, and a short wait just repeats the same failure.
+          const waitSeconds = 20 + (3 - networkRetriesLeft) * 20;
+          console.warn(
+            `${describeNetworkError(error)}. Waiting ${waitSeconds}s and retrying... ` +
+              `(${networkRetriesLeft} network retries left)`
+          );
           nextGroqCallNotBefore = Date.now() + waitSeconds * 1000;
           continue;
         }

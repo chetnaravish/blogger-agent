@@ -39,5 +39,14 @@
     "topic": "How to describe your data so AI builds the right database schema",
     "url": "https://chetnatechblog.blogspot.com/",
     "draft": true
+  },
+  {
+    "date": "2026-10-20",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "What the $1B AI Safety Bill Means for You",
+    "topic": "What does Anthropic's $1B safety bill threshold mean for your daily AI use?",
+    "url": "https://chetnatechblog.blogspot.com/",
+    "draft": true
   }
 ]

@@ -185,6 +185,12 @@ async function generateFromPollinations(prompt, timeoutMs, label) {
       }
 
       console.warn(`[images] Pollinations failed for ${label}: ${error.message}`);
+
+      // HTTP 503 means the service itself is down or overloaded.
+      // Waiting again rarely helps, so we go straight to the backup
+      // instead of burning two minutes on retries.
+      if (/HTTP 503/.test(error.message)) break;
+
       if (attempt < 2) await sleep(3000);
     }
   }
@@ -281,13 +287,39 @@ function buildPrompt({ topic, title, heading }) {
   ].join(' ');
 }
 
-/** A keyword short enough for a stock-photo search. */
+/** A keyword short enough for a stock-photo search.
+ *
+ * Takes up to 3 meaningful words instead of only the first one.
+ * "laptop on desk" used to become just "laptop"; now it stays
+ * "laptop desk", which gets far better photos.
+ */
 function simplifyKeyword(keyword) {
   const words = String(keyword ?? '')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((word) => word.length > 2);
-  return words[0] ?? '';
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+  return words.slice(0, 3).join(' ');
+}
+
+/** Words that carry no meaning in a photo search. */
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'into',
+  'about', 'when', 'where', 'what', 'how', 'can', 'use', 'using', 'one',
+]);
+
+/**
+ * Builds alt text a screen reader (and Google) can actually use.
+ *
+ * "Illustration for \"How to write a subject line\"" tells a blind
+ * reader nothing. This describes the scene instead, which is both
+ * kinder and better for search.
+ */
+function buildAltText({ articleTitle, heading, keyword }) {
+  const scene = [keyword, heading].filter(Boolean).join(', ');
+  if (!scene) return articleTitle || 'Article illustration';
+  // Keep it under 120 characters so it does not get truncated.
+  const text = `${scene} - illustration for "${articleTitle}"`;
+  return text.length > 120 ? `${scene} - illustration` : text;
 }
 
 // ---------------------------------------------------------------
@@ -310,6 +342,24 @@ export function saveImage(buffer, imagesDir, { date, slot }) {
 // ---------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------
+
+/**
+ * Credit object for a Pollinations-generated picture.
+ *
+ * Pollinations asks for CC BY 4.0 attribution, so we give the reader a
+ * link to the licence. There is no photographer to name here.
+ */
+function pollinationsCredit() {
+  return {
+    creator: 'Pollinations',
+    creatorUrl: 'https://pollinations.ai/',
+    license: 'by',
+    licenseVersion: '4.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    pageUrl: 'https://pollinations.ai/',
+    title: 'AI-generated illustration',
+  };
+}
 
 /**
  * Builds every image for the article.
@@ -346,7 +396,14 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
       if (generated) {
         const filename = saveImage(generated, imagesDir, { date, slot });
         result.sources.push(`Pollinations (${slot})`);
-        return { file: filename, bytes: generated.length, source: 'Pollinations', alt, credit: null };
+        return {
+          file: filename,
+          bytes: generated.length,
+          source: 'Pollinations',
+          alt,
+          // Pollinations asks for CC BY 4.0, so we credit it like any photo.
+          credit: pollinationsCredit(),
+        };
       }
 
       // --- Backup source ---
@@ -376,7 +433,11 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
   // ---- 1. Hero image ----
   const hero = await makeOne({
     slot: 'hero',
-    alt: `Illustration for "${article.title}"`,
+    alt: buildAltText({
+      articleTitle: article.title,
+      heading: article.sections?.[0]?.heading ?? '',
+      keyword: keywords[0],
+    }),
     keyword: keywords[0],
   }).catch(() => null); // extra belt-and-braces, makeOne already never throws
   if (hero) result.hero = hero;
@@ -387,7 +448,11 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
     const heading = sectionHeadings[index];
     const image = await makeOne({
       slot: `section-${index + 1}`,
-      alt: `Illustration for "${heading}"`,
+      alt: buildAltText({
+        articleTitle: article.title,
+        heading,
+        keyword: keywords[index + 1] || keywords[0],
+      }),
       keyword: keywords[index + 1] || keywords[0],
     }).catch(() => null);
     if (image) result.sections.push(image);

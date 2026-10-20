@@ -18,7 +18,7 @@
       "label": "AI Updates",
       "enabled": true,
 
-      "description": "New AI models, features, tools and launches, and what they actually mean for a beginner or a creator. Write about what changed, why it matters, and what to do about it.",
+      "description": "New AI models, features, tools and launches - and also major AI news like safety issues, privacy debates, new regulations, or a big company changing how its AI works. Write about what happened, why it matters to a normal user, and what to do about it.",
 
       "audience": "Beginners and creators who want to keep up with AI without drowning in jargon.",
 
@@ -26,7 +26,9 @@
         "A new AI image tool launched - what it does and who it is for",
         "OpenAI or Anthropic released an update - here is what changed for you",
         "A free AI model became available - is it worth switching?",
-        "An AI coding tool added a feature - here is how to use it"
+        "An AI coding tool added a feature - here is how to use it",
+        "An AI tool is in the news for a privacy or safety issue - what it means for you",
+        "New AI rules or regulation - what changes for the average user"
       ],
 
       "never_cover": "Celebrity gossip, political drama, funding roundup drama, or general technology news that has nothing to do with AI.",

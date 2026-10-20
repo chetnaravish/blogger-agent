@@ -43,36 +43,55 @@ export async function getAccessToken({ clientId, clientSecret, refreshToken }) {
     throw new Error(`${missing.join(', ')} is missing from .env. Run "npm run check".`);
   }
 
-  const response = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-    }),
-  });
+  let lastNetworkError = null;
 
-  if (!response.ok) {
-    const error = await toError(response, 'Google token request');
-
-    // invalid_grant = the refresh token was revoked / deleted / belongs to
-    // a different app. The only fix is to log in again.
-    if (error.body.includes('invalid_grant')) {
-      throw new Error(
-        'Google says invalid_grant: your refresh token is no longer valid.\n' +
-          'Fix: run "npm run auth", log in again, and paste the NEW refresh token into .env\n' +
-          'as GOOGLE_REFRESH_TOKEN. (Nothing is wrong with your code.)'
-      );
+  // A dropped connection here has no HTTP status, so it never reaches the
+  // error handling below. Give it a couple of tries before giving up.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let response;
+    try {
+      response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+        }),
+      });
+    } catch (error) {
+      lastNetworkError = error;
+      console.warn(`[blogger] Token request could not connect (${error.message}). Try ${attempt}/3...`);
+      await sleep(5000 * attempt);
+      continue;
     }
 
-    throw error;
+    if (!response.ok) {
+      const error = await toError(response, 'Google token request');
+
+      // invalid_grant = the refresh token was revoked / deleted / belongs to
+      // a different app. The only fix is to log in again.
+      if (error.body.includes('invalid_grant')) {
+        throw new Error(
+          'Google says invalid_grant: your refresh token is no longer valid.\n' +
+            'Fix: run "npm run auth", log in again, and paste the NEW refresh token into .env\n' +
+            'as GOOGLE_REFRESH_TOKEN. (Nothing is wrong with your code.)'
+        );
+      }
+
+      throw error;
+    }
+
+    const data = await response.json();
+    if (!data.access_token) throw new Error('Google did not return an access token.');
+    return data.access_token;
   }
 
-  const data = await response.json();
-  if (!data.access_token) throw new Error('Google did not return an access token.');
-  return data.access_token;
+  throw new Error(
+    `Could not reach Google to get an access token (${lastNetworkError?.message}). ` +
+      `This is a connection problem, not a mistake in your setup. Try again later.`
+  );
 }
 
 /** Lists your blogs. Used by scripts/auth.js to find BLOGGER_BLOG_ID. */
@@ -199,6 +218,26 @@ export async function publishPost({
         updated: post.updated,
       };
     } catch (error) {
+      lastError = error;
+
+      // A dropped connection has NO status at all - "fetch failed",
+      // "ECONNRESET", "UND_ERR_CONNECT_TIMEOUT". We still have the whole
+      // article at this point, so it is worth trying again rather than
+      // throwing away everything the run already built.
+      const isNetworkError = !error.status;
+      if (isNetworkError && attempt < 3) {
+        const waitSeconds = 10 * attempt;
+        console.warn(`[blogger] Network problem: ${error.message}. Waiting ${waitSeconds}s and retrying...`);
+        await sleep(waitSeconds * 1000);
+        continue;
+      }
+      if (isNetworkError) {
+        throw new Error(
+          `Google could not be reached after 3 tries (${error.message}).\n` +
+            `This is a connection problem, not a mistake in your setup. Run the post again later.`
+        );
+      }
+
       // 429/5xx retries and the final message already happened above.
       throw error;
     }
