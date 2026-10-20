@@ -57,5 +57,14 @@
     "topic": "How to Write Email Subject Lines That Actually Get Opened",
     "url": "https://chetnatechblog.blogspot.com/",
     "draft": true
+  },
+  {
+    "date": "2026-10-20",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI From Ignoring Your Code Style",
+    "topic": "How to stop AI coding tools from ignoring your existing style guide",
+    "url": "https://chetnatechblog.blogspot.com/",
+    "draft": true
   }
 ]
