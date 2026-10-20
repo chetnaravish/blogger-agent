@@ -150,10 +150,11 @@ async function main() {
   });
 
   // ---- Step 4: images ------------------------------------------
-  step(4, 'Making images (Pollinations, then Openverse as backup)');
+  step(4, 'Finding topic photos on Pixabay');
 
-  // We put an image after the first two sections.
-  const sectionHeadings = article.sections.slice(0, 2).map((section) => section.heading);
+  // Only 2 pictures in the whole post: a hero and one section image.
+  // More than that turns the article into a slideshow.
+  const sectionHeadings = article.sections.slice(0, 1).map((section) => section.heading);
 
   const saved = await findImages({
     article,
@@ -161,7 +162,6 @@ async function main() {
     date: today,
     imagesDir: IMAGES_DIR,
     timeoutMs: config.imageTimeoutSec * 1000,
-    maxSectionImages: 2,
   });
 
   // ---- Step 5: push images, then wait for jsDelivr -------------

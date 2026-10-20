@@ -99,9 +99,8 @@ const para = (text) => `<p>${escapeHtml(text)}</p>`;
 /**
  * One image + its credit line.
  *
- * Pollinations pictures have no photographer to credit.
- * Openverse photos may need one (CC BY always does), so we show the
- * photographer name and the license link underneath.
+ * Pixabay's Content License does not force a credit, but we show one
+ * anyway so the reader always knows where a picture came from.
  */
 function figure(image, alt) {
   if (!image) return '';
@@ -115,16 +114,18 @@ function figure(image, alt) {
 
   // Credit line, only when there is someone or something to credit.
   if (image.credit) {
-    const { creator, license, licenseVersion, licenseUrl, pageUrl } = image.credit;
-    const licenseLabel = `CC ${String(license ?? '').toUpperCase()} ${licenseVersion ?? ''}`.trim();
+    const { creator, license, licenseVersion, licenseUrl, pageUrl, licenseLabel } = image.credit;
+    // The credit module can give us a ready-made label (Pixabay does
+    // not use a Creative Commons licence), otherwise we build one.
+    const label = licenseLabel || `CC ${String(license ?? '').toUpperCase()} ${licenseVersion ?? ''}`.trim();
 
     parts.push('<figcaption style="font-size:0.85em;color:#666;">');
     parts.push(`Photo by ${escapeHtml(creator)}`);
 
     if (licenseUrl) {
-      parts.push(` / <a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener nofollow">${escapeHtml(licenseLabel)}</a>`);
+      parts.push(` / <a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener nofollow">${escapeHtml(label)}</a>`);
     } else {
-      parts.push(` / ${escapeHtml(licenseLabel)}`);
+      parts.push(` / ${escapeHtml(label)}`);
     }
 
     if (pageUrl) {
@@ -172,17 +173,15 @@ export function buildArticleHtml(article, images = {}) {
     parts.push(para(article.conclusion));
   }
 
-  // 5. Small credit footer. We list every source we actually used.
+  // 5. Small credit footer. One line naming the single source we use now.
   const used = [images.hero, ...sectionImages].filter(Boolean);
   if (used.length > 0) {
-    const fromOpenverse = used.some((image) => image.credit);
-    const note = fromOpenverse
-      ? 'Some images are from <a href="https://openverse.org/" target="_blank" rel="noopener">Openverse</a>. Credits are shown under each image.'
-      : 'Images were created with <a href="https://pollinations.ai/" target="_blank" rel="noopener">Pollinations</a>.';
-
     parts.push(
       '<hr />' +
-        `<p style="font-size:0.85em;color:#666;">${note}</p>`
+        '<p style="font-size:0.85em;color:#666;">' +
+        'Images from <a href="https://pixabay.com/" target="_blank" rel="noopener">Pixabay</a>, ' +
+        'used under the Pixabay Content License.' +
+        '</p>'
     );
   }
 

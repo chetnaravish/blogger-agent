@@ -77,6 +77,10 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
 
+          # Pixabay gives the photos for the post. Add the same secret
+          # in GitHub > Settings > Secrets and variables > Actions.
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+
           # Optional ones. ${{ vars.X }} comes from repo Variables and
           # is empty when you never set it, which the code treats as
           # "use the default".

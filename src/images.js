@@ -1,63 +1,106 @@
 // ============================================================
 // src/images.js
-// Makes the images for a post. NO API KEY NEEDED.
+// Makes the images for a post using PIXABAY ONLY.
 //
-//   Main   : Pollinations  - free AI pictures, no signup
-//   Backup : Openverse     - free real photos (CC BY / CC0 / PDM)
+// Pollinations and Openverse are gone. Pixabay needs one API key
+// (PIXABAY_API_KEY in .env) and gives real, topic-relevant photos.
 //
-// Both can fail. This module NEVER throws - if nothing works the
-// post is published without any image.
+// Rules for this file:
+//   - NEVER throws. A failed image search never stops the post.
+//   - Images must match the topic: we search with the picture words
+//     the writer chose, not with the article title.
+//   - Few images on purpose: 1 hero + 1 section picture at most.
+//   - Saved as a small JPEG (<= 1280px wide, <= 300 KB) into images/,
+//     then pushed to GitHub and served from jsDelivr.
 // ============================================================
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const POLLINATIONS_URL = 'https://image.pollinations.ai/prompt/';
-const OPENVERSE_URL = 'https://api.openverse.org/v1/images/';
+const PIXABAY_URL = 'https://pixabay.com/api/';
 
-// Pollinations free tier allows 1 image every 45 seconds per IP.
-const POLLINATIONS_COOLDOWN_MS = 46000;
+// The blog looks better with a couple of pictures than with a wall of
+// them, and every extra image costs a GitHub push + a jsDelivr wait.
+const MAX_SECTION_IMAGES = 1;
 
-// We must hit these limits, so they are fixed rules, not settings.
+// Hard limits, so a post can never carry a huge file.
 const MAX_WIDTH = 1280;
 const MAX_BYTES = 300 * 1024; // 300 KB
 
 // wsrv.nl is a free resize service used ONLY while we build the post.
-// The published blog only ever links to jsDelivr (our own GitHub repo),
-// so readers and Blogger never touch this service.
+// The published blog only ever links to jsDelivr (our own GitHub repo).
 const RESIZE_SERVICE = 'https://wsrv.nl/';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Remembers when we last called Pollinations, so we respect the 45s limit.
-let lastPollinationsCall = 0;
+// ---------------------------------------------------------------
+// API key
+// ---------------------------------------------------------------
+
+/**
+ * Reads the Pixabay key from the environment.
+ * We accept a couple of common spellings so a renamed .env line does
+ * not silently switch images off.
+ *
+ * @returns {string} '' when the key is missing (caller must cope)
+ */
+function getPixabayKey() {
+  const names = ['PIXABAY_API_KEY', 'PIXABAY_KEY', 'PIXABAY_TOKEN'];
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && value.trim().replace(/^["']|["']$/g, '').trim()) {
+      return value.trim().replace(/^["']|["']$/g, '').trim();
+    }
+  }
+  return '';
+}
 
 // ---------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------
 
+/** Words that make a photo search worse, so we drop them. */
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'into',
+  'about', 'when', 'where', 'what', 'how', 'can', 'use', 'using', 'one',
+  'why', 'when', 'you', 'are', 'its', 'it', 'to', 'of', 'in', 'on', 'a',
+]);
+
 /**
- * Reads the width/height out of a JPEG header.
- * A JPEG stores its size in an SOF segment, so we can read it by
- * walking the marker chain. This means we can CHECK an image
- * without installing an image library.
+ * Turns a heading or keyword into a photo search.
+ *
+ * "Keep it under 50 characters" becomes "keep under characters", and
+ * a useful visual keyword like "gavel on wooden desk" becomes
+ * "gavel wooden desk".
+ */
+function toSearchQuery(text) {
+  const words = String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+  return words.slice(0, 5).join(' ');
+}
+
+/**
+ * Reads the width/height out of a JPEG header, so we can CHECK an
+ * image without installing an image library.
  *
  * @returns {{width:number, height:number}|null}
  */
 export function jpegSize(buffer) {
   if (!buffer || buffer.length < 4) return null;
-  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return null; // not a JPEG
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
 
   let offset = 2;
   while (offset < buffer.length - 9) {
     if (buffer[offset] !== 0xff) {
-      offset++; // padding byte between segments
+      offset++;
       continue;
     }
 
     const marker = buffer[offset + 1];
-    // SOF0..SOF15 hold the frame size. Skip DHT/JPG/DAC in that range.
     const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
     if (isStartOfFrame) {
       return {
@@ -67,7 +110,7 @@ export function jpegSize(buffer) {
     }
 
     const length = buffer.readUInt16BE(offset + 2);
-    if (length < 2) return null; // corrupt, stop instead of looping forever
+    if (length < 2) return null;
     offset += 2 + length;
   }
   return null;
@@ -76,9 +119,9 @@ export function jpegSize(buffer) {
 /** A JPEG we can actually publish. */
 function isUsableImage(buffer) {
   if (!buffer || buffer.length < 5000) return false;
-  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return false; // must be JPEG
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) return false;
   const size = jpegSize(buffer);
-  if (!size || size.width < 400) return false; // too small to look good
+  if (!size || size.width < 400) return false;
   return true;
 }
 
@@ -104,7 +147,7 @@ async function download(url, timeoutMs, label) {
   }
 }
 
-/** Resizes any image URL to 1280px wide JPEG under 300 KB, no library needed. */
+/** Resizes any image URL to <=1280px wide JPEG under 300 KB, no library needed. */
 async function resizeToJpeg(sourceUrl, timeoutMs, label) {
   // Step down in quality until the file fits under 300 KB.
   for (const quality of [78, 66, 55]) {
@@ -121,7 +164,6 @@ async function resizeToJpeg(sourceUrl, timeoutMs, label) {
 
       console.warn(`[images] ${label} is ${(buffer.length / 1024).toFixed(0)} KB, trying lower quality.`);
     } catch (error) {
-      // If the resize service itself is down, try the original file.
       console.warn(`[images] resize failed for ${label}: ${error.message}`);
       break;
     }
@@ -139,99 +181,53 @@ async function resizeToJpeg(sourceUrl, timeoutMs, label) {
 }
 
 // ---------------------------------------------------------------
-// Main source: Pollinations (free AI images)
-// ---------------------------------------------------------------
-
-/** Waits out the 45 second free-tier limit. */
-async function respectPollinationsLimit() {
-  const waitFor = lastPollinationsCall + POLLINATIONS_COOLDOWN_MS - Date.now();
-  if (waitFor > 0) {
-    console.log(`[images] Pollinations free tier allows 1 image per 45s. Waiting ${Math.ceil(waitFor / 1000)}s...`);
-    await sleep(waitFor);
-  }
-}
-
-/**
- * Asks Pollinations for one 1280x720 image.
- * @returns {Promise<Buffer|null>}
- */
-async function generateFromPollinations(prompt, timeoutMs, label) {
-  const url =
-    `${POLLINATIONS_URL}${encodeURIComponent(prompt)}` +
-    '?width=1280&height=720&nologo=true&safe=true&seed=' +
-    Math.floor(Math.random() * 100000);
-
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    await respectPollinationsLimit();
-    lastPollinationsCall = Date.now();
-
-    try {
-      console.log(`[images] Pollinations: generating "${label}" (try ${attempt}/2)...`);
-      const buffer = await download(url, timeoutMs, `Pollinations ${label}`);
-
-      const size = jpegSize(buffer);
-      if (size && size.width > MAX_WIDTH) throw new Error(`${size.width}px wide, limit is ${MAX_WIDTH}px`);
-      if (buffer.length > MAX_BYTES) throw new Error(`${(buffer.length / 1024).toFixed(0)} KB is over the limit`);
-
-      return buffer;
-    } catch (error) {
-      // HTTP 402 with FREE_LIMIT means "come back in N seconds".
-      const retryHint = error.message.match(/retry after (\d+)s/i);
-      if (retryHint) {
-        const waitSeconds = Number(retryHint[1]) + 2;
-        console.warn(`[images] Pollinations rate limit hit. Waiting ${waitSeconds}s...`);
-        await sleep(waitSeconds * 1000);
-        continue;
-      }
-
-      console.warn(`[images] Pollinations failed for ${label}: ${error.message}`);
-
-      // HTTP 503 means the service itself is down or overloaded.
-      // Waiting again rarely helps, so we go straight to the backup
-      // instead of burning two minutes on retries.
-      if (/HTTP 503/.test(error.message)) break;
-
-      if (attempt < 2) await sleep(3000);
-    }
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------
-// Backup source: Openverse (free real photos)
+// Pixabay search
 // ---------------------------------------------------------------
 
 /**
- * Searches Openverse for photos we can reuse.
- * We only ask for licenses that are safe for a blog:
- *   by  = CC BY      (credit the photographer - we do that)
- *   cc0 = CC0        (public domain)
- *   pdm = Public Domain Mark
+ * Searches Pixabay for photos that match the query.
+ *
+ * We only ask for real photographs (image_type=photo), horizontal and
+ * large enough for a blog banner, with safe search on.
+ *
+ * @returns {Promise<object[]>} hits, or [] when anything goes wrong
  */
-async function searchOpenverse(keyword, timeoutMs) {
+async function searchPixabay(query, timeoutMs, key) {
+  if (!key) {
+    console.warn('[images] PIXABAY_API_KEY is not set, so no image will be fetched.');
+    return [];
+  }
+
   const params = new URLSearchParams({
-    q: keyword,
-    license: 'by,cc0,pdm',
-    mature: 'false',
-    aspect_ratio: 'wide',
-    size: 'large',
-    page_size: '8',
+    key,
+    q: query,
+    image_type: 'photo',
+    orientation: 'horizontal',
+    safesearch: 'true',
+    min_width: String(MAX_WIDTH),
+    per_page: '20',
   });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${OPENVERSE_URL}?${params}`, {
+    const response = await fetch(`${PIXABAY_URL}?${params}`, {
       signal: controller.signal,
       headers: { 'User-Agent': 'blogger-agent/1.0' },
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    const results = (await response.json()).results ?? [];
-    return results.filter((item) => item?.url);
+    if (!response.ok) {
+      // 400 usually means a bad key or a bad query - say so plainly.
+      const body = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}${body ? ` ${body.slice(0, 120)}` : ''}`);
+    }
+
+    const data = await response.json();
+    const hits = Array.isArray(data?.hits) ? data.hits : [];
+    return hits.filter((hit) => typeof hit?.largeImageURL === 'string' && hit.largeImageURL);
   } catch (error) {
-    console.warn(`[images] Openverse search failed for "${keyword}": ${error.message}`);
+    console.warn(`[images] Pixabay search failed for "${query}": ${error.message}`);
     return [];
   } finally {
     clearTimeout(timer);
@@ -239,87 +235,49 @@ async function searchOpenverse(keyword, timeoutMs) {
 }
 
 /**
- * Picks one Openverse photo and downloads it resized.
- * @returns {Promise<{buffer:Buffer, credit:object}|null>}
- */
-async function fetchFromOpenverse(keyword, timeoutMs, label) {
-  const results = await searchOpenverse(keyword, timeoutMs);
-  if (results.length === 0) return null;
-
-  for (const item of results.slice(0, 3)) {
-    const buffer = await resizeToJpeg(item.url, timeoutMs, `Openverse ${label}`);
-    if (!buffer) continue;
-
-    // Credit is required for CC BY, and we show it either way.
-    const credit = {
-      creator: item.creator ?? item.title ?? 'Unknown',
-      creatorUrl: item.creator_url ?? '',
-      license: item.license ?? '',
-      licenseVersion: item.license_version ?? '',
-      licenseUrl: item.license_url ?? 'https://creativecommons.org/licenses/',
-      pageUrl: item.foreign_landing_url ?? item.url,
-      title: item.title ?? '',
-    };
-
-    console.log(`[images]   credit: "${credit.title || credit.creator}" - CC ${String(credit.license).toUpperCase()} ${credit.licenseVersion}`);
-    return { buffer, credit };
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------
-// Prompt building
-// ---------------------------------------------------------------
-
-// Things we never want in a blog picture.
-const NEGATIVE = 'no text, no words, no letters, no logo, no watermark, no signature, no caption, no real person, no face, no identifiable human';
-
-// Turns the article title and keywords into a picture prompt.
-function buildPrompt({ topic, title, heading }) {
-  const subject = [topic, heading, title].filter(Boolean).join('. ');
-
-  return [
-    `Editorial illustration for a technology blog article.`,
-    `Subject: ${subject}.`,
-    `Style: clean modern flat vector illustration, soft natural lighting, muted professional colours.`,
-    `Wide 16:9 landscape composition, plenty of empty space, uncluttered.`,
-    NEGATIVE + '.',
-  ].join(' ');
-}
-
-/** A keyword short enough for a stock-photo search.
+ * Picks the best unused hit: prefer a wide photo whose own tags agree
+ * with what we searched for, so the picture really matches the topic.
  *
- * Takes up to 3 meaningful words instead of only the first one.
- * "laptop on desk" used to become just "laptop"; now it stays
- * "laptop desk", which gets far better photos.
+ * @param {object[]} hits
+ * @param {Set<string>} usedIds  ids we already used in this post
+ * @param {string} query         the words we searched for
  */
-function simplifyKeyword(keyword) {
-  const words = String(keyword ?? '')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
-  return words.slice(0, 3).join(' ');
-}
+function pickBest(hits, usedIds, query) {
+  const wanted = new Set(toSearchQuery(query).split(/\s+/).filter(Boolean));
+  if (hits.length === 0) return null;
 
-/** Words that carry no meaning in a photo search. */
-const STOPWORDS = new Set([
-  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'into',
-  'about', 'when', 'where', 'what', 'how', 'can', 'use', 'using', 'one',
-]);
+  const score = (hit) => {
+    let points = 0;
+    if (usedIds.has(String(hit.id))) points -= 100; // never repeat a photo
+    const tags = String(hit.tags ?? '').toLowerCase();
+    for (const word of wanted) if (tags.includes(word)) points += 5;
+    const width = Number(hit.imageWidth) || 0;
+    const height = Number(hit.imageHeight) || 0;
+    if (width >= 1280) points += 3;
+    if (height && width / height >= 1.4) points += 3; // nice banner shape
+    return points;
+  };
+
+  const best = hits.slice().sort((a, b) => score(b) - score(a))[0];
+  return score(best) <= -100 ? null : best; // only repeats available
+}
 
 /**
- * Builds alt text a screen reader (and Google) can actually use.
- *
- * "Illustration for \"How to write a subject line\"" tells a blind
- * reader nothing. This describes the scene instead, which is both
- * kinder and better for search.
+ * Credit line for a Pixabay photo.
+ * The Pixabay Content License does not require credit, but showing it
+ * is honest and tells readers where the picture came from.
  */
-function buildAltText({ articleTitle, heading, keyword }) {
-  const scene = [keyword, heading].filter(Boolean).join(', ');
-  if (!scene) return articleTitle || 'Article illustration';
-  // Keep it under 120 characters so it does not get truncated.
-  const text = `${scene} - illustration for "${articleTitle}"`;
-  return text.length > 120 ? `${scene} - illustration` : text;
+function pixabayCredit(hit) {
+  return {
+    creator: hit?.user || 'Pixabay',
+    creatorUrl: hit?.user_id ? `https://pixabay.com/users/${hit.user_id}-${hit.user}/` : 'https://pixabay.com/',
+    license: 'pixabay',
+    licenseVersion: '',
+    licenseLabel: 'Pixabay Content License',
+    licenseUrl: 'https://pixabay.com/service/terms/',
+    pageUrl: hit?.pageURL || 'https://pixabay.com/',
+    title: hit?.tags || '',
+  };
 }
 
 // ---------------------------------------------------------------
@@ -328,15 +286,30 @@ function buildAltText({ articleTitle, heading, keyword }) {
 
 /**
  * Saves one image into images/ with a name that can never clash:
- *   2026-10-17-hero-4f9a2c.jpg
+ *   2026-10-20-hero-4f9a2c.jpg
  * @returns {string} the file name
  */
 export function saveImage(buffer, imagesDir, { date, slot }) {
   fs.mkdirSync(imagesDir, { recursive: true });
-  const unique = crypto.randomBytes(3).toString('hex'); // 6 random chars
+  const unique = crypto.randomBytes(3).toString('hex');
   const filename = `${date}-${slot}-${unique}.jpg`;
   fs.writeFileSync(path.join(imagesDir, filename), buffer);
   return filename;
+}
+
+// ---------------------------------------------------------------
+// Alt text
+// ---------------------------------------------------------------
+
+/**
+ * Alt text a screen reader (and Google) can actually use.
+ * It names the scene instead of just repeating the title.
+ */
+function buildAltText({ articleTitle, heading, query }) {
+  const scene = [query, heading].filter(Boolean).join(', ');
+  if (!scene) return articleTitle || 'Article image';
+  const text = `${scene} - illustration for "${articleTitle}"`;
+  return text.length > 120 ? `${scene} - illustration` : text;
 }
 
 // ---------------------------------------------------------------
@@ -344,80 +317,71 @@ export function saveImage(buffer, imagesDir, { date, slot }) {
 // ---------------------------------------------------------------
 
 /**
- * Credit object for a Pollinations-generated picture.
- *
- * Pollinations asks for CC BY 4.0 attribution, so we give the reader a
- * link to the licence. There is no photographer to name here.
- */
-function pollinationsCredit() {
-  return {
-    creator: 'Pollinations',
-    creatorUrl: 'https://pollinations.ai/',
-    license: 'by',
-    licenseVersion: '4.0',
-    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
-    pageUrl: 'https://pollinations.ai/',
-    title: 'AI-generated illustration',
-  };
-}
-
-/**
- * Builds every image for the article.
+ * Builds the images for the article. Pixabay only, and only a few.
  *
  * @param {object} params
- * @param {object} params.article       the article from article.js
- * @param {string[]} params.sectionHeadings  one per section we want an image for
- * @param {string} params.date          "YYYY-MM-DD" used in the file name
- * @param {string} params.imagesDir     where to save
- * @param {number} params.timeoutMs     per request timeout
- * @param {number} params.maxSectionImages
+ * @param {object} params.article   the article from article.js
+ * @param {string[]} params.sectionHeadings
+ * @param {string} params.date      "YYYY-MM-DD" used in the file name
+ * @param {string} params.imagesDir
+ * @param {number} params.timeoutMs
  * @returns {Promise<{hero:object|null, sections:object[], sources:string[]}>}
  */
-export async function findImages({ article, sectionHeadings = [], date, imagesDir, timeoutMs = 60000, maxSectionImages = 2 }) {
+export async function findImages({ article, sectionHeadings = [], date, imagesDir, timeoutMs = 60000 }) {
   const result = { hero: null, sections: [], sources: [] };
+  const key = getPixabayKey();
+  const usedIds = new Set();
+
   const keywords = (article.image_keywords ?? []).filter(Boolean);
 
-  console.log('[images] No API key needed. Trying Pollinations first, Openverse as backup.');
-  console.log(`[images] Keywords from the article: ${keywords.join(', ') || '(none)'}`);
+  if (!key) {
+    console.warn('[images] PIXABAY_API_KEY is missing. The post will be created without images.');
+    console.warn('[images] Add it to .env (and to GitHub Actions secrets), then run again.');
+    return result;
+  }
+
+  console.log('[images] Source: Pixabay only.');
+  console.log(`[images] Picture words from the article: ${keywords.join(', ') || '(none)'}`);
 
   /**
-   * One image, trying the main source then the backup.
-   * NOTHING in here is allowed to throw. If anything at all goes wrong
-   * we return null and the post simply goes out without this image.
+   * One image. Searches Pixabay with topic words, then downloads and
+   * resizes it. NOTHING in here is allowed to throw - a failed picture
+   * means the post simply goes out without it.
    *
-   * @returns {Promise<object|null>} saved image record
+   * @returns {Promise<object|null>}
    */
-  async function makeOne({ slot, alt, keyword }) {
+  async function makeOne({ slot, heading, preferredQuery }) {
     try {
-      const prompt = buildPrompt({ topic: article.title, title: article.title, heading: alt });
+      // Try up to two search phrases, best first, so a narrow query
+      // still lands a picture.
+      const queries = [
+        toSearchQuery(preferredQuery),
+        toSearchQuery(heading),
+        toSearchQuery(keywords[0] ?? article.title),
+      ].filter((q, index, all) => q && all.indexOf(q) === index);
 
-      // --- Main source ---
-      const generated = await generateFromPollinations(prompt, timeoutMs, slot);
-      if (generated) {
-        const filename = saveImage(generated, imagesDir, { date, slot });
-        result.sources.push(`Pollinations (${slot})`);
+      for (const query of queries) {
+        const hits = await searchPixabay(query, timeoutMs, key);
+        const hit = pickBest(hits, usedIds, query);
+        if (!hit) {
+          console.warn(`[images] No suitable Pixabay photo for "${query}".`);
+          continue;
+        }
+
+        const buffer = await resizeToJpeg(hit.largeImageURL, timeoutMs, `${slot} (${query})`);
+        if (!buffer) continue;
+
+        usedIds.add(String(hit.id));
+        const filename = saveImage(buffer, imagesDir, { date, slot });
+        result.sources.push(`Pixabay (${slot})`);
+
+        console.log(`[images]   tags: ${String(hit.tags ?? '').slice(0, 70)}`);
         return {
           file: filename,
-          bytes: generated.length,
-          source: 'Pollinations',
-          alt,
-          // Pollinations asks for CC BY 4.0, so we credit it like any photo.
-          credit: pollinationsCredit(),
-        };
-      }
-
-      // --- Backup source ---
-      const searchTerm = keyword || simplifyKeyword(keywords[0]) || article.title;
-      const backup = await fetchFromOpenverse(searchTerm, timeoutMs, slot);
-      if (backup) {
-        const filename = saveImage(backup.buffer, imagesDir, { date, slot });
-        result.sources.push(`Openverse (${slot})`);
-        return {
-          file: filename,
-          bytes: backup.buffer.length,
-          source: 'Openverse',
-          alt,
-          credit: backup.credit,
+          bytes: buffer.length,
+          source: 'Pixabay',
+          alt: buildAltText({ articleTitle: article.title, heading, query }),
+          credit: pixabayCredit(hit),
         };
       }
 
@@ -430,40 +394,31 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
     }
   }
 
-  // ---- 1. Hero image ----
+  // ---- 1. Hero picture (topic words first - it must match the post) ----
   const hero = await makeOne({
     slot: 'hero',
-    alt: buildAltText({
-      articleTitle: article.title,
-      heading: article.sections?.[0]?.heading ?? '',
-      keyword: keywords[0],
-    }),
-    keyword: keywords[0],
-  }).catch(() => null); // extra belt-and-braces, makeOne already never throws
+    heading: article.sections?.[0]?.heading ?? '',
+    preferredQuery: keywords[0] ?? article.title,
+  }).catch(() => null);
   if (hero) result.hero = hero;
 
-  // ---- 2. Section images ----
-  const wanted = Math.min(maxSectionImages, sectionHeadings.length);
-  for (let index = 0; index < wanted; index++) {
+  // ---- 2. One section picture, never a wall of them ----
+  for (let index = 0; index < Math.min(MAX_SECTION_IMAGES, sectionHeadings.length); index++) {
     const heading = sectionHeadings[index];
     const image = await makeOne({
       slot: `section-${index + 1}`,
-      alt: buildAltText({
-        articleTitle: article.title,
-        heading,
-        keyword: keywords[index + 1] || keywords[0],
-      }),
-      keyword: keywords[index + 1] || keywords[0],
+      heading,
+      preferredQuery: keywords[index + 1] ?? keywords[0] ?? heading,
     }).catch(() => null);
     if (image) result.sections.push(image);
   }
 
   // ---- 3. Summary ----
-  const total = 1 + result.sections.length;
-  console.log(`[images] Done. ${total} image(s) saved: ${result.sources.join(', ') || 'none'}`);
-  console.log(`[images] Sources used: ${[...new Set(result.sources)].join(', ') || 'none'}`);
+  const total = (result.hero ? 1 : 0) + result.sections.length;
+  console.log(`[images] Done. ${total} image(s) saved from Pixabay.`);
+  if (total === 0) console.log('[images] The post will be published without images.');
 
   return result;
 }
 
-export { MAX_WIDTH, MAX_BYTES };
+export { MAX_WIDTH, MAX_BYTES, MAX_SECTION_IMAGES };

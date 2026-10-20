@@ -3,8 +3,7 @@
 // All settings live in .env. This file gives every module the
 // same defaults, so a blank value in .env never breaks the run.
 //
-// Images need NO API key. They come from Pollinations (free) with
-// Openverse as a free backup.
+// Images come from Pixabay and need PIXABAY_API_KEY in .env.
 // ============================================================
 
 const DEFAULT_NICHE = 'AI tools, web development, and digital marketing for beginners';
@@ -63,6 +62,7 @@ export function getConfig() {
 
     // Secrets. Never logged, only sent to the APIs.
     groqApiKey: str('GROQ_API_KEY', ''),
+    pixabayApiKey: str('PIXABAY_API_KEY', ''),
     googleClientId: str('GOOGLE_CLIENT_ID', ''),
     googleClientSecret: str('GOOGLE_CLIENT_SECRET', ''),
     googleRefreshToken: str('GOOGLE_REFRESH_TOKEN', ''),

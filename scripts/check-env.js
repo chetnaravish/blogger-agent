@@ -11,9 +11,16 @@
 
 import 'dotenv/config';
 
-// The first 4 are needed for a run to work at all.
+// The first 5 are needed for a run to work at all.
 // The rest have sensible defaults, so being blank is fine.
-const REQUIRED = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN', 'BLOGGER_BLOG_ID', 'GROQ_API_KEY'];
+const REQUIRED = [
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_REFRESH_TOKEN',
+  'BLOGGER_BLOG_ID',
+  'GROQ_API_KEY',
+  'PIXABAY_API_KEY',
+];
 
 const OPTIONAL = [
   'GROQ_MODEL',
@@ -32,6 +39,7 @@ const SOURCES = {
   GOOGLE_REFRESH_TOKEN: 'run "npm run auth" and copy the printed value',
   BLOGGER_BLOG_ID: 'run "npm run auth" - it prints the id next to your blog name',
   GROQ_API_KEY: 'https://console.groq.com/keys',
+  PIXABAY_API_KEY: 'https://pixabay.com/api/docs/ - sign up free, then copy your key',
 };
 
 /** True when the variable is unset or contains only spaces/quotes. */
@@ -65,8 +73,12 @@ for (const name of OPTIONAL) {
 }
 
 console.log('IMAGES');
-console.log('  No API key needed. Pollinations first, Openverse as backup,');
-console.log('  images saved into images/ and served via jsDelivr.');
+if (isEmpty('PIXABAY_API_KEY')) {
+  console.log('  PIXABAY_API_KEY is missing -> no images will be added to the post.');
+} else {
+  console.log('  Pixabay is ready (key hidden). Topic photos are downloaded,');
+  console.log('  resized to <=1280px / <=300KB, saved into images/ and served via jsDelivr.');
+}
 
 // Tell the user plainly whether this run will be a draft or live.
 const draft = (process.env.PUBLISH_AS_DRAFT ?? '').trim().toLowerCase();
