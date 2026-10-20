@@ -62,6 +62,15 @@
     "date": "2026-10-20",
     "category": "vibe_coding",
     "categoryLabel": "Vibe Coding",
+    "title": "Stop AI From Ignoring Your Code Style",
+    "topic": "How to stop AI coding tools from ignoring your existing style guide",
+    "url": "https://chetnatechblog.blogspot.com/",
+    "draft": true
+  },
+  {
+    "date": "2026-10-20",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
     "title": "Why Your AI App Looks Broken on Mobile",
     "topic": "Why Your AI-Generated App Breaks on Mobile",
     "url": "https://chetnatechblog.blogspot.com/",
