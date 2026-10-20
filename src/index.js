@@ -45,6 +45,25 @@ function done(message) {
   console.log(`\n================ DONE ================\n${message}\n========================================\n`);
 }
 
+/**
+ * Should today's post carry the portfolio link?
+ *
+ * Chetna asked for it on ALTERNATE days: one day with the link, the
+ * next day without, and so on. The day number decides it, so the
+ * pattern is stable and does not depend on how many posts exist.
+ *
+ *   2026-10-21 -> 21 is odd  -> link
+ *   2026-10-22 -> 22 is even -> no link
+ *
+ * It is a pure function of the date, so a re-run on the same day
+ * always makes the same choice.
+ */
+export function shouldShowPortfolio(dateString) {
+  const day = Number(String(dateString).slice(8, 10));
+  if (!Number.isFinite(day)) return false;
+  return day % 2 === 1;
+}
+
 /** Everything is optional except the secrets, so check the essentials. */
 function requireKeys(config) {
   const required = [
@@ -139,6 +158,14 @@ async function main() {
   // ---- Step 3: article -----------------------------------------
   step(3, 'Writing the article');
 
+  // The portfolio link goes in on alternate days only.
+  const showPortfolio = shouldShowPortfolio(today) && Boolean(config.portfolioUrl);
+  console.log(
+    showPortfolio
+      ? `      Portfolio link: ON for ${today}`
+      : `      Portfolio link: OFF for ${today} (alternate-day rule)`
+  );
+
   const article = await generateArticle({
     topic,
     angle,
@@ -147,6 +174,8 @@ async function main() {
     language: config.language,
     today,
     newsHeadlines: news.headlines,
+    showPortfolio,
+    portfolioUrl: config.portfolioUrl,
   });
 
   // ---- Step 4: images ------------------------------------------
@@ -222,10 +251,11 @@ async function main() {
   // ---- Step 6: html --------------------------------------------
   step(6, 'Building the Blogger HTML');
 
-  const content = buildArticleHtml(article, hosted);
+  const content = buildArticleHtml(article, hosted, { portfolioUrl: showPortfolio ? config.portfolioUrl : '' });
   console.log(`      HTML size: ${(content.length / 1024).toFixed(1)} KB`);
   console.log(`      SEO description: ${article.meta_description}`);
   console.log(`      Labels: ${article.labels.join(', ')}`);
+  if (showPortfolio) console.log('      Portfolio link: included');
 
   // ---- Step 7: publish -----------------------------------------
   step(7, config.isDraft ? 'Saving the post as a DRAFT' : 'Publishing the post LIVE');

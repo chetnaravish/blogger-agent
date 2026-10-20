@@ -109,7 +109,12 @@ Plan the article now.
 Rules:
 - Title: under 70 characters, specific, no clickbait, no year unless it is ${today ? today.slice(0, 4) : 'current'}.
 - 5 sections. Each section is ONE idea.
-- For each section give a short heading and a "note" of 1 or 2 sentences saying exactly what that section must teach.
+- 2 or 3 of the 5 headings must be a QUESTION the reader would actually
+  ask, in their own words ("How do I know which keyword to pick?").
+  The other headings stay short and plain ("Where the free tools break").
+  Do NOT make every heading a question - it reads like a survey.
+- For each section give that heading and a "note" of 1 or 2 sentences saying
+  exactly what the answer must teach.
 - The 5 sections together must be able to fill 1000-1300 words.
 - labels: 3 to 5 short single-word tags.
 - image_keywords: 3 simple visual search phrases (e.g. "laptop on desk"). Never a brand, product or person name.
@@ -130,15 +135,57 @@ Reply with ONLY this JSON:
     throw new Error('outline reply was not valid JSON');
   }
 
-  const sections = outline.sections
-    .map((section) => ({
-      heading: plainText(section?.heading),
-      note: plainText(section?.note),
-    }))
-    .filter((section) => section.heading && section.note);
+  // Cleans one plan JSON into the shape we use.
+  const cleanSections = (plan) =>
+    (plan.sections ?? [])
+      .map((section) => ({
+        heading: plainText(section?.heading),
+        note: plainText(section?.note),
+      }))
+      .filter((section) => section.heading && section.note);
 
+  const isQuestion = (heading) => /[?]\s*$/.test(heading);
+  const questionMixOk = (list) => {
+    const n = list.filter((s) => isQuestion(s.heading)).length;
+    return n >= 2 && n <= 3;
+  };
+
+  let sections = cleanSections(outline);
   if (sections.length < 3) {
     throw new Error(`outline gave only ${sections.length} sections, we need at least 3`);
+  }
+
+  // The reader wants SOME question headings, not all of them. When the
+  // mix is wrong we ask once more with the exact numbers spelled out -
+  // one extra small call, not a whole rewrite of the plan.
+  if (!questionMixOk(sections)) {
+    const wrongCount = sections.filter((s) => isQuestion(s.heading)).length;
+    console.warn(
+      `[article] Outline had ${wrongCount} question heading(s), we want 2 or 3. Asking again...`
+    );
+    const retry = await chat(
+      [
+        { role: 'system', content: 'You are a careful blog planner. You reply with JSON only.' },
+        {
+          role: 'user',
+          content:
+            prompt +
+            `\n\nYour last plan had ${wrongCount} question headings. ` +
+            'This time EXACTLY 2 or 3 of the 5 headings must end with a question mark, ' +
+            'and the remaining headings must be short statements without one.',
+        },
+      ],
+      { json: true }
+    );
+    const again = extractJson(retry);
+    const fixed = again && Array.isArray(again.sections) ? cleanSections(again) : [];
+    if (fixed.length >= 3 && questionMixOk(fixed)) {
+      sections = fixed;
+      Object.assign(outline, again);
+    } else {
+      const recount = fixed.filter((s) => isQuestion(s.heading)).length;
+      console.warn(`[article] Retry still off (${recount} questions). Keeping the first plan.`);
+    }
   }
 
   return {
@@ -159,16 +206,21 @@ async function writeSection({ voice, title, heading, note, words, position, tota
 
 Article title: ${title}
 This section's heading: ${heading}
-This section must cover: ${note}
+What this section must answer or explain: ${note}
 ${today ? `Today's date: ${today}. Do not use an older year as if it were current.` : ''}
 
 ${voice}
 
-Rules:
-- Write about ${words} words for this section alone.
-- Do NOT repeat the heading. Do NOT write the intro or conclusion.
-- Do NOT write "In this section" or "As we discussed".
-- Give one concrete example somewhere in it.
+Rules for the SHAPE of this section:
+- Open with the answer, in 1 or 2 plain sentences. If the heading is a
+  question, answer it immediately - never make the reader hunt for it.
+- Then give the detail as POINTS using a <ul> or <ol> list whenever there
+  are 3 or more items. Lists are what people read on a phone.
+- If a list does not fit, write short paragraphs of 2 or 3 sentences only.
+- Bold ONE important phrase with <strong> so a skimmer catches it.
+- Do NOT repeat the heading. Do NOT write "In this section" or "As we discussed".
+- Do NOT write the intro or the conclusion.
+- Aim for ${words} words for this section alone.
 - Simple HTML only: <p>, <ul>, <ol>, <li>, <strong>, <em>, <code>.
 - No <script>, <style>, <h2>, <img> or any heading tag. We add headings ourselves.
 - Never invent statistics, prices, dates or studies.
@@ -198,7 +250,23 @@ Reply with ONLY this JSON:
 // ------------------------------------------------------------------
 
 /** Writes the opening, the closing, and the SEO fields. */
-async function writeWrapUp({ voice, title, headings, notes, today }) {
+async function writeWrapUp({ voice, title, headings, notes, today, portfolioUrl, showPortfolio }) {
+  const portfolioRules = showPortfolio
+    ? `
+This article also needs ONE link to the writer's portfolio: ${portfolioUrl}
+
+- portfolio_line: one sentence, 15 to 30 words, that connects what the
+  reader just learned to real work the writer has actually shipped. It
+  must read as the next useful step, never as an advertisement.
+- portfolio_after: the NUMBER (1, 2, 3...) of the section after which
+  this line belongs. Choose the section where the reader is most likely
+  to think "I would like to see an example of this". Not section 1.
+  Usually 2, 3 or 4.
+`
+    : '';
+
+  const portfolioJson = showPortfolio ? `,"portfolio_line":"","portfolio_after":0` : '';
+
   const prompt = `Finish this article. Write the opening, the closing, and the small SEO fields.
 
 Article title: ${title}
@@ -213,9 +281,9 @@ Rules:
 - conclusion: about 120 words. Give the smallest useful next step. No "In conclusion".
 - meta_description: one sentence under 160 characters for search engines.
 - Never invent statistics, prices, dates or studies.
-
+${portfolioRules}
 Reply with ONLY this JSON:
-{"intro":"","conclusion":"","meta_description":""}`;
+{"intro":"","conclusion":"","meta_description":""${portfolioJson}}`;
 
   const raw = await chat(
     [
@@ -229,11 +297,15 @@ Reply with ONLY this JSON:
   if (!parsed || typeof parsed.intro !== 'string' || typeof parsed.conclusion !== 'string') {
     throw new Error('wrap-up reply was not valid JSON');
   }
-  return {
+
+  const result = {
     intro: plainText(parsed.intro),
     conclusion: plainText(parsed.conclusion),
     meta_description: plainText(parsed.meta_description),
+    portfolio_line: plainText(parsed.portfolio_line ?? ''),
+    portfolio_after: Number(parsed.portfolio_after) || 0,
   };
+  return result;
 }
 
 // ------------------------------------------------------------------
@@ -291,6 +363,8 @@ export async function generateArticle({
   language,
   today = '',
   newsHeadlines = [],
+  showPortfolio = false,
+  portfolioUrl = '',
 }) {
   const voice = loadVoice();
   console.log(`[article] Writing voice loaded (${voice.length} characters).`);
@@ -334,13 +408,19 @@ export async function generateArticle({
   }
 
   // ---------- pass 3: wrap-up ----------
-  console.log('[article] Pass 3/3: writing intro, conclusion and SEO fields...');
+  console.log(
+    showPortfolio
+      ? '[article] Pass 3/3: writing intro, conclusion, SEO fields and the portfolio line...'
+      : '[article] Pass 3/3: writing intro, conclusion and SEO fields...'
+  );
   const wrapUp = await writeWrapUp({
     voice,
     title: outline.title,
     headings: sections.map((s) => s.heading),
     notes: outline.sections.map((s) => s.note),
     today,
+    showPortfolio,
+    portfolioUrl,
   });
 
   const article = {
@@ -351,6 +431,8 @@ export async function generateArticle({
     conclusion: wrapUp.conclusion,
     labels: outline.labels,
     image_keywords: outline.image_keywords,
+    portfolio_line: wrapUp.portfolio_line ?? '',
+    portfolio_after: wrapUp.portfolio_after ?? 0,
   };
 
   const problems = validateArticle(article);

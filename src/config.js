@@ -8,6 +8,12 @@
 
 const DEFAULT_NICHE = 'AI tools, web development, and digital marketing for beginners';
 const DEFAULT_LANGUAGE = 'English';
+
+// Chetna's portfolio. Public URL, not a secret, so it has a default
+// here and works in GitHub Actions with no extra setup.
+// Override it in .env if the address ever changes.
+const DEFAULT_PORTFOLIO_URL = 'https://chetnaportflio.vercel.app/';
+
 // We use qwen/qwen3.8-27b because it returns strict JSON reliably.
 //
 // WHY NOT the gpt-oss models (openai/gpt-oss-120b / 20b)?
@@ -52,6 +58,10 @@ export function getConfig() {
     niche: str('BLOG_NICHE', DEFAULT_NICHE),
     language: str('BLOG_LANGUAGE', DEFAULT_LANGUAGE),
     model: str('GROQ_MODEL', DEFAULT_MODEL),
+
+    // Where readers can see Chetna's own work. Added to posts on
+    // alternate days (see shouldShowPortfolio in index.js).
+    portfolioUrl: str('PORTFOLIO_URL', DEFAULT_PORTFOLIO_URL),
 
     isDraft: bool('PUBLISH_AS_DRAFT', true),
 

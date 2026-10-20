@@ -276,19 +276,21 @@ npm run post
 ## 3.2 — Jo hoga (2-3 minute lagega)
 
 ```
-[1/7] Checking whether today's post already exists
-      No live post. Safe to continue.
-[2/7] Choosing a fresh topic
+[1/8] Checking whether today's post already exists
+      No live post for 2026-10-21. Safe to continue.
+[2/8] Choosing a fresh topic
       Topic chosen: How to Use the Groq API for Free
-[3/7] Writing the article
+[3/8] Writing the article
+      Portfolio link: ON for 2026-10-21
       Title: ...
-      Sections: 5, words: 882
-[4/7] Making images
-      Pollinations: generating "hero"...
-      Pollinations free tier allows 1 image per 45s. Waiting 37s...
-      Sources used: Pollinations (hero), Pollinations (section-1)
-[5/8] Making the images reachable
+      Sections: 5, words: 1100
+[4/8] Finding topic photos on Pixabay
+[images] Source: Pixabay only.
+[images] hero (laptop code editor) @ abc123 -> 48 KB
+[5/8] Making the images reachable on the web
+[cdn] Image is live (check 1).
 [6/8] Building the Blogger HTML
+      Portfolio link: included
 [7/8] Saving the post as a DRAFT
 [8/8] Saving the entry to posted.json
 
@@ -470,9 +472,9 @@ chalao — wo khud next free port (3000, 3001, ...) lega.
 ## ⚠️ Images nahi aa rahi
 
 Terminal me dekho:
-- `Sources used: Pollinations (...)` → sahi chal raha hai
-- `Sources used: none` → dono source fail hue. **Ye theek hai**, post
-  bina image ke chali jaayegi. Agli baar try karo.
+- `[images] hero (...) -> 48 KB` → Pixabay se image mil gayi, sahi chal raha hai
+- `[images] Done. 0 image(s)` → search fail hua (net ya API key check karo).
+  **Ye theek hai**, post bina image ke chali jaayegi. Agli baar try karo.
 
 Agar ye dikhe:
 ```

@@ -30,6 +30,7 @@ const OPTIONAL = [
   'PUBLISH_LIVE_DAILY',
   'AUTO_COMMIT_PUSH',
   'IMAGE_TIMEOUT_SEC',
+  'PORTFOLIO_URL',
 ];
 
 // Where each key comes from, so this output doubles as a checklist.

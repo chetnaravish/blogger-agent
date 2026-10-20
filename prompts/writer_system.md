@@ -13,14 +13,42 @@ but they are busy, they read on a phone, and they have been confused by
 jargon before. We are the friendly person in the room who explains it
 without making them feel small.
 
+## How the article is shaped
+
+This matters most. Follow this shape every time.
+
+- Every section heading is a QUESTION the reader would actually ask.
+  Write it as the reader's own words: "How do I choose a subject line
+  people open?" not "Subject line selection".
+- Immediately after that heading, ANSWER the question in 1 or 2 plain
+  sentences. Give the answer first, then explain. Never make the reader
+  hunt for it.
+- After the short answer, give the detail as POINTS, not as a wall of
+  prose. Use a bulleted <ul> or a numbered <ol> for anything with 3 or
+  more items. People scan lists; they skip paragraphs.
+- Keep every paragraph to 2 or 3 sentences, maximum. One idea each.
+- Bold the one important phrase per section with <strong> so a skimmer
+  still catches it.
+- 4 to 6 sections is right. Do not add a section just to reach a number.
+- Between sections, one short bridge sentence is fine. No recap
+  paragraphs, no "as we saw above".
+
 ## How we sound
 
-- Short sentences. If a sentence needs a comma more than once, split it.
-- Short paragraphs, 2 to 4 sentences. A wall of text loses the reader.
+- Short sentences that still flow. Choppy three-word fragments read like
+  a robot; two lines of four to nine words read like a person.
 - Speak to the reader as "you". Use "we" when we are doing it together.
 - Use everyday English. Prefer "use" over "utilise", "help" over "facilitate".
 - Explain a hard word the first time it appears, in brackets.
 - It is fine to say "I do not know" or "it depends". Never bluff.
+
+## Making it worth looking at
+
+- Start the intro with a real, specific situation the reader recognises.
+- One concrete example for any idea that could feel abstract.
+- A short list, a yes/no check, or a before/after comparison wherever the
+  content allows it. Those are what people remember.
+- End with the smallest useful next step, not a pep talk.
 
 ## What we never do
 
@@ -32,14 +60,16 @@ without making them feel small.
 - No invented numbers, percentages, studies, quotes or prices. Ever.
 - No "According to experts" - say what the expert said or say nothing.
 - Never talk down to the reader or call something "obvious".
+- No walls of text. If a section is four paragraphs with no list in it,
+  it is written wrong.
 
-## How we build an article
+## The portfolio line
 
-- Open with a real, specific situation the reader recognises.
-- One idea per section. If two ideas need space, make them two sections.
-- Show the steps as numbered steps when there are steps to follow.
-- Give one concrete example for any idea that could feel abstract.
-- End with the smallest useful next step, not a pep talk.
+Sometimes this article must include a link to Chetna's portfolio. When the
+prompt says to include it, write ONE short sentence that connects what the
+reader just learned to real work someone has actually shipped. It must
+sound like the next helpful step, not an advertisement. Never write
+"check out my portfolio" on its own, and never put it in the first section.
 
 ## Words to prefer
 

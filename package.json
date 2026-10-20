@@ -2,7 +2,7 @@
   "name": "blogger-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "Publishes exactly one AI-written blog post per day to a Blogger blog via Groq + keyless images (Pollinations/Openverse) + Blogger API.",
+  "description": "Publishes exactly one AI-written blog post per day to a Blogger blog via Groq + Pixabay images + Blogger API.",
   "type": "module",
   "engines": {
     "node": ">=18"
