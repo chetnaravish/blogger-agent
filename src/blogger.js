@@ -246,4 +246,163 @@ export async function publishPost({
   throw lastError ?? new Error('Publishing failed.');
 }
 
+/**
+ * Publishes an EXISTING post (posts.publish) - turns a saved draft
+ * into a live post without writing anything new.
+ *
+ * This is what turns tomorrow's prepared draft into the daily post.
+ * Same 3-attempt retry pattern as publishPost: refresh on 401, wait
+ * on 429/5xx, wait on a dropped connection.
+ *
+ * @param {object} params
+ * @param {string} params.accessToken
+ * @param {() => Promise<string>} [params.refreshAccessToken]
+ * @param {string} params.blogId
+ * @param {string} params.postId   the draft to publish
+ * @returns {Promise<{id:string, url:string, status:string, published:boolean}>}
+ */
+export async function publishExistingPost({
+  accessToken,
+  refreshAccessToken,
+  blogId,
+  postId,
+}) {
+  if (!blogId) throw new Error('BLOGGER_BLOG_ID is missing from .env. Run "npm run auth" to get it.');
+  if (!postId) throw new Error('No postId given - nothing to publish.');
+
+  const endpoint = `${BLOGGER_API}/blogs/${blogId}/posts/${postId}/publish`;
+  let lastError = null;
+  let currentToken = accessToken;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+
+      if (!response.ok) {
+        const error = await toError(response, 'Blogger posts.publish');
+        lastError = error;
+
+        if (error.status === 401 && attempt < 3) {
+          if (!refreshAccessToken) throw new Error(explainBloggerError(error));
+          console.warn('[blogger] Access token refused (401). Getting a new one and retrying...');
+          currentToken = await refreshAccessToken();
+          continue;
+        }
+
+        if (isTransient(error) && attempt < 3) {
+          const waitSeconds = 10 * attempt;
+          console.warn(`[blogger] Google said HTTP ${error.status}. Waiting ${waitSeconds}s and retrying...`);
+          await sleep(waitSeconds * 1000);
+          continue;
+        }
+
+        throw new Error(explainBloggerError(error));
+      }
+
+      const post = await response.json();
+      return {
+        id: post.id,
+        url: post.url ?? '',
+        // Blogger answers with "LIVE" for a published post.
+        status: post.status ?? '',
+        published: post.status === 'LIVE' || post.status === 'PUBLISHED',
+      };
+    } catch (error) {
+      lastError = error;
+      const isNetworkError = !error.status;
+      if (isNetworkError && attempt < 3) {
+        const waitSeconds = 10 * attempt;
+        console.warn(`[blogger] Network problem: ${error.message}. Waiting ${waitSeconds}s and retrying...`);
+        await sleep(waitSeconds * 1000);
+        continue;
+      }
+      if (isNetworkError) {
+        throw new Error(
+          `Google could not be reached after 3 tries (${error.message}).\n` +
+            `This is a connection problem, not a mistake in your setup. Try again later.`
+        );
+      }
+      throw error;
+    }
+  }
+
+  throw lastError ?? new Error('Publishing the existing post failed.');
+}
+
+/**
+ * Reads a post's current status: 'LIVE', 'DRAFT' or 'SCHEDULED'.
+ * Used to verify a publish/revert actually took effect.
+ *
+ * NOTE: plain posts.get answers 404 for a DRAFT by design - Blogger
+ * only returns unpublished posts to an ADMIN-level view. view=AUTHOR
+ * is what makes a draft readable; without it every draft looks missing.
+ *
+ * @param {object} params
+ * @param {string} params.accessToken
+ * @param {string} params.blogId
+ * @param {string} params.postId
+ * @returns {Promise<{id:string, status:string, url:string, title:string}>}
+ */
+export async function getPostStatus({ accessToken, blogId, postId }) {
+  const endpoint =
+    `${BLOGGER_API}/blogs/${blogId}/posts/${postId}` +
+    '?view=AUTHOR&fields=id,status,url,title';
+  const response = await fetch(endpoint, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) throw await toError(response, 'Blogger posts.get');
+  const post = await response.json();
+  return { id: post.id, status: post.status ?? '', url: post.url ?? '', title: post.title ?? '' };
+}
+
+/**
+ * Puts a LIVE post back to DRAFT (posts.revert).
+ *
+ * Kept as a safety net: if something is wrong with the post that just
+ * went live, one call pulls it back out of public view.
+ *
+ * @param {object} params
+ * @param {string} params.accessToken
+ * @param {() => Promise<string>} [params.refreshAccessToken]
+ * @param {string} params.blogId
+ * @param {string} params.postId
+ * @returns {Promise<{id:string, status:string}>}
+ */
+export async function revertPost({ accessToken, refreshAccessToken, blogId, postId }) {
+  if (!blogId) throw new Error('BLOGGER_BLOG_ID is missing from .env.');
+  if (!postId) throw new Error('No postId given - nothing to revert.');
+
+  const endpoint = `${BLOGGER_API}/blogs/${blogId}/posts/${postId}/revert`;
+  let currentToken = accessToken;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+
+    if (!response.ok) {
+      const error = await toError(response, 'Blogger posts.revert');
+      if (error.status === 401 && attempt < 3 && refreshAccessToken) {
+        console.warn('[blogger] Access token refused (401). Getting a new one and retrying...');
+        currentToken = await refreshAccessToken();
+        continue;
+      }
+      if (isTransient(error) && attempt < 3) {
+        await sleep(10 * attempt * 1000);
+        continue;
+      }
+      throw new Error(explainBloggerError(error));
+    }
+
+    const post = await response.json();
+    return { id: post.id, status: post.status ?? '' };
+  }
+
+  throw new Error('Reverting the post failed.');
+}
+
 export { SCOPE };

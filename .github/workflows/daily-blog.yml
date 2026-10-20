@@ -92,10 +92,12 @@ jobs:
           #
           # Manual run  : the "publish_as_draft" input above decides.
           # Scheduled run: "auto" means let PUBLISH_LIVE_DAILY decide.
-          #                To publish live every morning, set the GitHub
-          #                variable PUBLISH_LIVE_DAILY = true.
+          # Chetna confirmed LIVE daily mode on 2026-10-20, so scheduled
+          # runs default to "true" here. To switch back to drafts, set the
+          # repo variable PUBLISH_LIVE_DAILY = false (Settings > Secrets
+          # and variables > Actions > Variables) - the variable wins.
           PUBLISH_AS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_as_draft || 'auto' }}
-          PUBLISH_LIVE_DAILY: ${{ vars.PUBLISH_LIVE_DAILY }}
+          PUBLISH_LIVE_DAILY: ${{ vars.PUBLISH_LIVE_DAILY || 'true' }}
 
           # The agent may commit and push, so it needs write access.
           AUTO_COMMIT_PUSH: "true"

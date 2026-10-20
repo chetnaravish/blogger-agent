@@ -24,14 +24,14 @@ import 'dotenv/config';
 
 import { getConfig } from './config.js';
 import { loadCategories, chooseCategory, parseCategoryOverride, describeRotation } from './categories.js';
-import { getIstDate, getIstTime, readPosted, hasLivePostForDate, addEntry, getRecentTitles, getTitlesForCategory } from './logger.js';
+import { getIstDate, getIstTime, readPosted, writePosted, hasLivePostForDate, addEntry, getRecentTitles, getTitlesForCategory } from './logger.js';
 import { getNewsHeadlines } from './news.js';
 import { generateTopic } from './topic.js';
 import { generateArticle } from './article.js';
 import { findImages } from './images.js';
 import { buildArticleHtml } from './html.js';
 import { detectRepo, buildImageUrl, waitForImage, commitAndPush, IMAGES_DIR } from './cdn.js';
-import { getAccessToken, publishPost } from './blogger.js';
+import { getAccessToken, publishPost, publishExistingPost } from './blogger.js';
 
 const TOTAL_STEPS = 8;
 
@@ -178,6 +178,81 @@ async function main() {
   }
   console.log(`      No live post for ${today}. Safe to continue.`);
   console.log(`      (already in log: ${posted.length} post(s))`);
+
+  // ---- Step 1b: a post was PREPARED for today? ------------------
+  // An entry carrying "autoPublishOn" + "postId" is a draft that was
+  // written earlier and is waiting for its day. On that day we just
+  // publish it as-is - no new topic, no new article, no new images.
+  // This is how the vibe coding draft was queued for 2026-10-21.
+  const readyIndex = posted.findIndex(
+    (entry) => entry?.autoPublishOn && entry.autoPublishOn <= today && entry?.postId
+  );
+
+  if (readyIndex !== -1) {
+    const ready = posted[readyIndex];
+    console.log(
+      `      Prepared post found: "${ready.title}" (id ${ready.postId}, queued for ${ready.autoPublishOn})`
+    );
+
+    // Draft mode: the post is already sitting as a draft, so there is
+    // nothing to publish. Leave the queue mark in place - the live run
+    // will pick it up later.
+    if (config.isDraft) {
+      done(
+        `Today's post was prepared in advance and is already saved as a draft:\n` +
+          `"${ready.title}"\n\n` +
+          `This run was in DRAFT mode, so nothing was published.\n` +
+          `The live run (PUBLISH_LIVE_DAILY=true) will publish it.`
+      );
+      return;
+    }
+
+    step(1, 'Publishing the post that was prepared for today');
+
+    const google = {
+      clientId: config.googleClientId,
+      clientSecret: config.googleClientSecret,
+      refreshToken: config.googleRefreshToken,
+    };
+
+    try {
+      const accessToken = await getAccessToken(google);
+      const published = await publishExistingPost({
+        accessToken,
+        refreshAccessToken: () => getAccessToken(google),
+        blogId: config.bloggerBlogId,
+        postId: ready.postId,
+      });
+
+      // The queue mark is consumed, the entry becomes a normal
+      // "published on this date" record.
+      ready.date = today;
+      ready.draft = false;
+      if (published.url) ready.url = published.url;
+      delete ready.autoPublishOn;
+      writePosted(posted);
+
+      done(
+        `POST PUBLISHED. "${ready.title}"\n` +
+          `URL: ${ready.url || published.url}\n` +
+          `Status: ${published.status || 'LIVE'}\n\n` +
+          `Open your blog to see it live.`
+      );
+      return;
+    } catch (error) {
+      // 404 = the prepared draft was deleted on Blogger. Drop the queue
+      // mark and fall through to writing a fresh post, so one deleted
+      // draft can never break every future day.
+      if (error.status === 404) {
+        console.warn('      The prepared post no longer exists on Blogger (deleted?).');
+        console.warn('      Queue mark removed - writing a fresh post instead.');
+        delete ready.autoPublishOn;
+        writePosted(posted);
+      } else {
+        throw error;
+      }
+    }
+  }
 
   // ---- Step 2: topic -------------------------------------------
   step(2, 'Choosing a fresh topic');
@@ -359,6 +434,9 @@ async function main() {
     title: article.title,
     topic,
     url: result.url,
+    // The Blogger id, so this post can be published or reverted later
+    // without guessing which one it was.
+    postId: String(result.id),
     draft: config.isDraft,
   });
 
