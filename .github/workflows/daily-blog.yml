@@ -16,10 +16,15 @@ on:
 
   # Lets you trigger a run by hand from the Actions tab.
   # This is the only manual trigger - code pushes do NOT run the agent.
+  #
+  # It is ALSO used by the external 8 AM trigger (cron-job.org), which
+  # sends: {"ref":"main","inputs":{"publish_as_draft":"auto"}}
+  # "auto" means "decide by PUBLISH_LIVE_DAILY", exactly like the cron.
+  # See docs/HOW-TO.md > "Exact 8 AM trigger".
   workflow_dispatch:
     inputs:
       publish_as_draft:
-        description: "true = save as draft, false = publish live"
+        description: "true = save as draft, false = publish live, auto = follow PUBLISH_LIVE_DAILY"
         required: false
         default: "true"
         type: string

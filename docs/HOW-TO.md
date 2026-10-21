@@ -415,6 +415,78 @@ bas **Actions** tab → **Run workflow** → `publish_as_draft` = **`false`**.
 
 ---
 
+## 5.5 — Exact 8:00 AM trigger (cron-job.org)
+
+> **Kyun chahiye?** GitHub ka free cron **best-effort** hai — kabhi 8 baje
+> chalta hai, kabhi 5 ghante late. Exact 8:00 AM ke liye bahar se trigger
+> lagana padta hai. **GitHub ka cron backup ke liye chalu rahega** —
+> duplicate post nahi hoga (posted.json guard rok deta hai).
+
+### Step A — GitHub token banao
+
+1. github.com → avatar → **Settings** → **Developer settings**
+2. **Personal access tokens** → **Fine-grained tokens** → **Generate new token**
+3. Ye values bharo:
+
+| Field | Value |
+|---|---|
+| Token name | `blogger-agent-cron` |
+| Expiration | `1 year` (ya custom — expire hone par renew karna hoga) |
+| Repository access | **Only select repositories** → `chetnaravish/blogger-agent` |
+| Repository permissions | **Actions: Read and write** (baaki sab `No access`) |
+
+4. **Generate token** → `github_pat_...` copy kar lo (ek hi baar dikhta hai)
+
+> 🔒 Ye token sirf is ek repo ka workflow trigger kar sakta hai. Kisi ko
+> na do. Leak ho jaye to token delete karke naya banao.
+
+### Step B — cron-job.org par job banao
+
+1. https://cron-job.org → **Sign up** (free) → email verify karo
+2. **Create cronjob** → ye bharo:
+
+**Common tab:**
+
+| Field | Value |
+|---|---|
+| Title | `Blogger Agent 8AM IST` |
+| URL | `https://api.github.com/repos/chetnaravish/blogger-agent/actions/workflows/daily-blog.yml/dispatches` |
+| Schedule | **Every day** → `08:00` |
+| Timezone | **Asia/Kolkata** ← bahut zaroori |
+
+**Advanced tab:**
+
+| Field | Value |
+|---|---|
+| Request method | `POST` |
+| Request body | `{"ref":"main","inputs":{"publish_as_draft":"auto"}}` |
+
+**Headers (4 add karo):**
+
+| Header | Value |
+|---|---|
+| `Authorization` | `Bearer github_pat_...` (Bearer + space + token) |
+| `Accept` | `application/vnd.github+json` |
+| `Content-Type` | `application/json` |
+| `X-GitHub-Api-Version` | `2022-11-28` |
+
+3. **Save** → **TEST RUN** dabao
+4. Status **204** (ya 200) dikhe = ✅ success. Fail (401/403) = token galat
+   ya permission missing.
+
+### Step C — Verify
+
+GitHub repo → **Actions** → **Daily Blog Post** me ek naya run dikhega
+(`workflow_dispatch`). Green tick = sab theek.
+
+> 🧪 Test run safe hai — agar aaj ki post already LIVE hai to run likhega
+> `already LIVE. Nothing to do.` aur exit ho jayega.
+
+> ⏰ Token 1 saal me expire hoga — renew karna bhoolo mat, warna exact
+> 8 AM wala trigger band ho jayega (GitHub cron backup chalta rahega).
+
+---
+
 # Part 6: Error aaye to (Troubleshooting)
 
 ---
