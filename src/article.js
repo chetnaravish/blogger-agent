@@ -228,21 +228,40 @@ Rules for the SHAPE of this section:
 Reply with ONLY this JSON:
 {"body_html":""}`;
 
-  const raw = await chat(
-    [
-      { role: 'system', content: 'You are a careful blog writer. You reply with JSON only.' },
-      { role: 'user', content: prompt },
-    ],
-    { json: true }
-  );
+  // Groq sometimes cuts a reply short (token ceiling, rate-limit hiccup).
+  // A short section used to kill the whole run, so we ask again with a
+  // clear "that was too short" note before giving up.
+  const MAX_ATTEMPTS = 3;
+  let lastCount = 0;
 
-  const parsed = extractJson(raw);
-  const html = sanitizeHtml(parsed?.body_html ?? '');
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const retryNote =
+      attempt === 1
+        ? ''
+        : `\n- IMPORTANT: your previous reply was only ${lastCount} words. That is too short. Write the full ${words}-word section this time.`;
 
-  if (countWords(html) < 80) {
-    throw new Error(`section ${position + 1} came back too short (${countWords(html)} words)`);
+    const raw = await chat(
+      [
+        { role: 'system', content: 'You are a careful blog writer. You reply with JSON only.' },
+        { role: 'user', content: prompt + retryNote },
+      ],
+      { json: true }
+    );
+
+    const parsed = extractJson(raw);
+    const html = sanitizeHtml(parsed?.body_html ?? '');
+    lastCount = countWords(html);
+
+    if (lastCount >= 80) return html;
+
+    console.warn(
+      `[article]   ${position + 1}. attempt ${attempt}/${MAX_ATTEMPTS} too short (${lastCount} words). Asking again...`
+    );
   }
-  return html;
+
+  throw new Error(
+    `section ${position + 1} stayed too short after ${MAX_ATTEMPTS} attempts (${lastCount} words)`
+  );
 }
 
 // ------------------------------------------------------------------
