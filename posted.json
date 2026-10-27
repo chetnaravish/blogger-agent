@@ -135,5 +135,15 @@
     "url": "https://chetnatechblog.blogspot.com/2026/10/fix-low-ctr-rewrite-titles-with-ai.html",
     "postId": "185581264318974908",
     "draft": false
+  },
+  {
+    "date": "2026-10-27",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI from breaking your React file structure",
+    "topic": "How to make AI coding tools respect your existing React project structure",
+    "url": "https://chetnatechblog.blogspot.com/2026/10/stop-ai-from-breaking-your-react-file.html",
+    "postId": "940788669076046730",
+    "draft": false
   }
 ]
