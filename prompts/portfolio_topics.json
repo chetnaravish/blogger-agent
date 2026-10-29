@@ -1,0 +1,52 @@
+{
+  "_note": "Topics for the PORTFOLIO website only (the Blogger agent never reads this file). They are used top to bottom; a topic already in the portfolio repo's automation/published-posts.json is skipped. Add, remove or reorder freely. When every topic is used, the agent asks Groq for a new one in the same style.",
+
+  "categories": {
+    "digital_marketing": {
+      "label": "Digital Marketing",
+      "description": "Beginner-friendly explainers on SEO, social media, YouTube, content, email, ads and personal branding.",
+      "audience": "Students, beginners, small business owners and freelancers who want to understand online marketing."
+    },
+    "ai": {
+      "label": "AI",
+      "description": "Plain-language explainers on how AI tools work and how to use them well in everyday work.",
+      "audience": "Beginners, students and small business owners who are curious about AI but not technical."
+    },
+    "vibe_coding": {
+      "label": "Vibe Coding",
+      "description": "Building websites, chatbots and small apps by describing them to AI coding tools.",
+      "audience": "Beginners and non-coders who want to build things on the web with AI help."
+    }
+  },
+
+  "topics": [
+    { "topic": "What is digital marketing", "category": "digital_marketing" },
+    { "topic": "How to make your own chatbot", "category": "vibe_coding" },
+    { "topic": "What is the YouTube algorithm and how does it work", "category": "digital_marketing" },
+    { "topic": "What is ChatGPT and how does it actually work", "category": "ai" },
+    { "topic": "What is SEO and how does it work", "category": "digital_marketing" },
+    { "topic": "How to make a website without coding", "category": "vibe_coding" },
+    { "topic": "What is prompt engineering", "category": "ai" },
+    { "topic": "How to grow on Instagram as a beginner", "category": "digital_marketing" },
+    { "topic": "What is GitHub and why every beginner needs it", "category": "vibe_coding" },
+    { "topic": "What is an AI agent", "category": "ai" },
+    { "topic": "What is content marketing", "category": "digital_marketing" },
+    { "topic": "How to deploy a website for free on Vercel", "category": "vibe_coding" },
+    { "topic": "What is generative AI", "category": "ai" },
+    { "topic": "What is social media management", "category": "digital_marketing" },
+    { "topic": "What is an API, explained simply", "category": "vibe_coding" },
+    { "topic": "How to use AI for content writing the right way", "category": "ai" },
+    { "topic": "What is personal branding and why it matters", "category": "digital_marketing" },
+    { "topic": "What is vibe coding", "category": "vibe_coding" },
+    { "topic": "What is machine learning in simple words", "category": "ai" },
+    { "topic": "What is local SEO", "category": "digital_marketing" },
+    { "topic": "How to build a portfolio website with AI", "category": "vibe_coding" },
+    { "topic": "How Google Ads work for beginners", "category": "digital_marketing" },
+    { "topic": "How to automate small daily tasks with AI", "category": "ai" },
+    { "topic": "What is email marketing", "category": "digital_marketing" },
+    { "topic": "How to start a YouTube channel as a beginner", "category": "digital_marketing" },
+    { "topic": "What is Google Search Console and why it matters", "category": "digital_marketing" },
+    { "topic": "What is a sales funnel", "category": "digital_marketing" },
+    { "topic": "How to write a blog post people actually read", "category": "digital_marketing" }
+  ]
+}

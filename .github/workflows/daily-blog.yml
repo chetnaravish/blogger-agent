@@ -150,3 +150,61 @@ jobs:
         run: |
           echo "Files on the remote branch:"
           git ls-tree --name-only -r origin/${{ github.event.repository.default_branch }} -- images | tail -20
+
+  # ============================================================
+  #  Portfolio website - a SEPARATE job, separate code, separate log.
+  #
+  #  Runs after the Blogger job has finished (pass or fail), so the
+  #  two never use Groq at the same time. It has its OWN topics
+  #  (prompts/portfolio_topics.json - evergreen explainers such as
+  #  "What is digital marketing"), written in first person in the
+  #  portfolio's own template - and only every 3 days.
+  #
+  #  If this job fails, the Blogger post is untouched.
+  # ============================================================
+  portfolio:
+    name: Portfolio post (every 3 days)
+    needs: publish
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository (latest, with today's posted.json)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # It reads only. It never writes posted.json or touches Blogger.
+      # The portfolio repo is changed through the GitHub API in ONE
+      # atomic commit, and only when PORTFOLIO_PUBLISH is "true".
+      - name: Run the portfolio publisher
+        run: node src/portfolioEntry.js --scheduled
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          PORTFOLIO_GH_TOKEN: ${{ secrets.PORTFOLIO_GH_TOKEN }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          PORTFOLIO_GROQ_MODEL: ${{ vars.PORTFOLIO_GROQ_MODEL }}
+          PORTFOLIO_REPO: "chetnaravish/portfolio"
+          PORTFOLIO_BRANCH: "main"
+          PORTFOLIO_SITE_URL: "https://chetnaportflio.vercel.app"
+
+          # Go live: add the repo variable PORTFOLIO_PUBLISH = true
+          # (Settings > Secrets and variables > Actions > Variables).
+          # Until then every run is a dry run with no GitHub writes.
+          PORTFOLIO_PUBLISH: ${{ vars.PORTFOLIO_PUBLISH || 'false' }}
+
+          # Minimum IST calendar days between portfolio posts.
+          PORTFOLIO_INTERVAL_DAYS: ${{ vars.PORTFOLIO_INTERVAL_DAYS || '3' }}
+
+          DOTENV_CONFIG_QUIET: "true"

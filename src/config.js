@@ -14,6 +14,13 @@ const DEFAULT_LANGUAGE = 'English';
 // Override it in .env if the address ever changes.
 const DEFAULT_PORTFOLIO_URL = 'https://chetnaportflio.vercel.app/';
 
+// The portfolio website is a SEPARATE repository. The agent reads its
+// templates and files at runtime and (only when allowed) pushes one
+// atomic commit back to it.
+const DEFAULT_PORTFOLIO_REPO = 'chetnaravish/portfolio';
+const DEFAULT_PORTFOLIO_BRANCH = 'main';
+const DEFAULT_PORTFOLIO_SITE_URL = 'https://chetnaportflio.vercel.app';
+
 // We use qwen/qwen3.8-27b because it returns strict JSON reliably.
 //
 // WHY NOT the gpt-oss models (openai/gpt-oss-120b / 20b)?
@@ -53,15 +60,39 @@ function num(name, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+/** Reads a positive whole number, e.g. a number of days. */
+function int(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 export function getConfig() {
   return {
     niche: str('BLOG_NICHE', DEFAULT_NICHE),
     language: str('BLOG_LANGUAGE', DEFAULT_LANGUAGE),
     model: str('GROQ_MODEL', DEFAULT_MODEL),
 
+    // Optional: only the portfolio article uses this model.
+    // Blogger keeps using GROQ_MODEL above.
+    portfolioGroqModel: str('PORTFOLIO_GROQ_MODEL', ''),
+
     // Where readers can see Chetna's own work. Added to posts on
     // alternate days (see shouldShowPortfolio in index.js).
     portfolioUrl: str('PORTFOLIO_URL', DEFAULT_PORTFOLIO_URL),
+
+    // The separate static portfolio repository. PORTFOLIO_PUBLISH is
+    // only true for the exact value "true" - anything else means dry
+    // run, so a typo can never push a post live by accident.
+    portfolioToken: str('PORTFOLIO_GH_TOKEN', ''),
+    portfolioRepo: str('PORTFOLIO_REPO', DEFAULT_PORTFOLIO_REPO),
+    portfolioBranch: str('PORTFOLIO_BRANCH', DEFAULT_PORTFOLIO_BRANCH),
+    portfolioSiteUrl: str('PORTFOLIO_SITE_URL', DEFAULT_PORTFOLIO_SITE_URL).replace(/\/+$/, ''),
+    portfolioPublish: str('PORTFOLIO_PUBLISH', 'false') === 'true',
+    portfolioForce: str('PORTFOLIO_FORCE', '') === 'true',
+
+    // Minimum IST calendar days between portfolio posts. The newest date
+    // in the portfolio repo's published-posts.json is the source of truth.
+    portfolioIntervalDays: int('PORTFOLIO_INTERVAL_DAYS', 3),
 
     isDraft: bool('PUBLISH_AS_DRAFT', true),
 

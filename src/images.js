@@ -84,6 +84,21 @@ function toSearchQuery(text) {
 }
 
 /**
+ * A gentler search query for the portfolio cover. It keeps short but
+ * important words such as "ai" and only removes punctuation, so a
+ * model-supplied coverQuery like "ai laptop desk" stays intact.
+ */
+function toPhotoQuery(text) {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5)
+    .join(' ');
+}
+
+/**
  * Reads the width/height out of a JPEG header, so we can CHECK an
  * image without installing an image library.
  *
@@ -180,6 +195,142 @@ async function resizeToJpeg(sourceUrl, timeoutMs, label) {
   return null;
 }
 
+/** True when the file really is a WebP image. */
+function isWebp(buffer) {
+  return (
+    Buffer.isBuffer(buffer) &&
+    buffer.length > 1000 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  );
+}
+
+/** Download a WebP with a hard timeout and validate it before use. */
+async function downloadWebp(url, timeoutMs, label) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'blogger-agent/1.0' },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!isWebp(buffer)) throw new Error('downloaded file is not a usable WebP');
+    console.log(`[images] ${label} -> ${(buffer.length / 1024).toFixed(0)} KB`);
+    return buffer;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Resizes a source photo to a fixed WebP crop with wsrv.nl.
+ * `fit=cover` keeps the requested aspect ratio, which is what the
+ * portfolio card and the social cover both need.
+ */
+async function resizeToWebp(sourceUrl, { width, height }, timeoutMs, label) {
+  for (const quality of [82, 70]) {
+    const url =
+      `${RESIZE_SERVICE}?url=${encodeURIComponent(sourceUrl)}` +
+      `&w=${width}&h=${height}&fit=cover&output=webp&q=${quality}`;
+
+    try {
+      return await downloadWebp(url, timeoutMs, `${label} @ q${quality}`);
+    } catch (error) {
+      console.warn(`[images] WebP resize failed for ${label} (q${quality}): ${error.message}`);
+    }
+  }
+  return null;
+}
+
+/**
+ * Finds, crops and returns the two images the portfolio needs.
+ *
+ * It reuses the same Pixabay search and credit helpers as the Blogger
+ * flow, but returns raw buffers because the portfolio publisher sends
+ * them to GitHub in the same commit as the HTML.
+ *
+ * `excludeIds` holds the Pixabay ids already used by today's Blogger
+ * post. If the best hit is one of them, the next result is used.
+ *
+ * @param {object} params
+ * @param {string} params.query        the model's coverQuery (2-3 words)
+ * @param {string[]} [params.excludeIds]
+ * @param {number} [params.timeoutMs]
+ * @returns {Promise<{pixabayId:string, cover:Buffer, card:Buffer, alt:string, credit:object}>}
+ */
+export async function findPortfolioPhotos({
+  query,
+  excludeIds = [],
+  timeoutMs = 60000,
+} = {}) {
+  const key = getPixabayKey();
+  if (!key) {
+    throw new Error('PIXABAY_API_KEY is missing, so the portfolio image cannot be made.');
+  }
+
+  const searchQuery = toPhotoQuery(query) || toPhotoQuery('technology workspace');
+
+  // The portfolio is about tech and marketing, so try Pixabay's business
+  // and computer categories first. A plain search for "funnel" otherwise
+  // returns kitchen funnels and mushrooms.
+  let hits = [];
+  for (const pixabayCategory of ['business', 'computer', '']) {
+    hits = await searchPixabay(searchQuery, timeoutMs, key, pixabayCategory);
+    if (hits.length >= 3) break;
+  }
+  if (hits.length === 0) {
+    throw new Error(`Pixabay returned no photos for "${searchQuery}".`);
+  }
+
+  const excluded = new Set(excludeIds.map((id) => String(id)));
+  const wanted = new Set(searchQuery.split(/\s+/).filter(Boolean));
+
+  const score = (hit) => {
+    let points = 0;
+    const tags = String(hit.tags ?? '').toLowerCase();
+    for (const word of wanted) if (tags.includes(word)) points += 5;
+    const width = Number(hit.imageWidth) || 0;
+    const height = Number(hit.imageHeight) || 0;
+    if (width >= 1200) points += 3;
+    if (height && width / height >= 1.4) points += 3;
+    return points;
+  };
+
+  const candidates = hits
+    .filter((hit) => !excluded.has(String(hit.id)))
+    .slice()
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 6);
+
+  if (candidates.length === 0) {
+    throw new Error('Pixabay only returned the image already used by the Blogger post.');
+  }
+
+  for (const hit of candidates) {
+    const cover = await resizeToWebp(hit.largeImageURL, { width: 1200, height: 630 }, timeoutMs, 'portfolio cover');
+    if (!cover) continue;
+
+    const card = await resizeToWebp(hit.largeImageURL, { width: 778, height: 560 }, timeoutMs, 'portfolio card');
+    if (!card) continue;
+
+    console.log(`[images] Portfolio photo chosen: Pixabay id ${hit.id} (${String(hit.tags ?? '').slice(0, 60)})`);
+    return {
+      pixabayId: String(hit.id),
+      cover,
+      card,
+      alt: String(hit.tags ?? '').trim() || searchQuery,
+      credit: pixabayCredit(hit),
+    };
+  }
+
+  throw new Error(`Could not download or resize a usable Pixabay photo for "${searchQuery}".`);
+}
+
 // ---------------------------------------------------------------
 // Pixabay search
 // ---------------------------------------------------------------
@@ -192,7 +343,7 @@ async function resizeToJpeg(sourceUrl, timeoutMs, label) {
  *
  * @returns {Promise<object[]>} hits, or [] when anything goes wrong
  */
-async function searchPixabay(query, timeoutMs, key) {
+async function searchPixabay(query, timeoutMs, key, pixabayCategory = '') {
   if (!key) {
     console.warn('[images] PIXABAY_API_KEY is not set, so no image will be fetched.');
     return [];
@@ -207,6 +358,7 @@ async function searchPixabay(query, timeoutMs, key) {
     min_width: String(MAX_WIDTH),
     per_page: '20',
   });
+  if (pixabayCategory) params.set('category', pixabayCategory);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -380,6 +532,8 @@ export async function findImages({ article, sectionHeadings = [], date, imagesDi
           file: filename,
           bytes: buffer.length,
           source: 'Pixabay',
+          // Kept so the portfolio step can avoid reusing this exact photo.
+          pixabayId: String(hit.id),
           alt: buildAltText({ articleTitle: article.title, heading, query }),
           credit: pixabayCredit(hit),
         };

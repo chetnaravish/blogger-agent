@@ -10,7 +10,11 @@
   "scripts": {
     "auth": "node scripts/auth.js",
     "check": "node scripts/check-env.js",
-    "post": "node src/index.js"
+    "post": "node src/index.js",
+    "daily": "node src/index.js",
+    "portfolio:scheduled": "node src/portfolioEntry.js --scheduled",
+    "portfolio:dry": "node src/portfolioEntry.js --dry",
+    "portfolio:publish": "node src/portfolioEntry.js --publish"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

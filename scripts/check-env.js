@@ -31,6 +31,14 @@ const OPTIONAL = [
   'AUTO_COMMIT_PUSH',
   'IMAGE_TIMEOUT_SEC',
   'PORTFOLIO_URL',
+  'PORTFOLIO_GH_TOKEN',
+  'PORTFOLIO_REPO',
+  'PORTFOLIO_BRANCH',
+  'PORTFOLIO_SITE_URL',
+  'PORTFOLIO_PUBLISH',
+  'PORTFOLIO_FORCE',
+  'PORTFOLIO_INTERVAL_DAYS',
+  'PORTFOLIO_GROQ_MODEL',
 ];
 
 // Where each key comes from, so this output doubles as a checklist.
@@ -69,8 +77,24 @@ for (const name of REQUIRED) {
 console.log('OPTIONAL (blank = built-in default is used)');
 for (const name of OPTIONAL) {
   const empty = isEmpty(name);
-  const label = empty ? 'default in use' : 'custom value set (hidden)';
+  const label =
+    name === 'PORTFOLIO_GH_TOKEN' && empty
+      ? 'not set (portfolio step fails)'
+      : empty
+        ? 'default in use'
+        : 'custom value set (hidden)';
   console.log(`  [ ${empty ? 'DEFAULT' : '  SET  '} ] ${name}  -> ${label}`);
+}
+
+if (isEmpty('PORTFOLIO_GH_TOKEN')) {
+  console.log('');
+  console.log('PORTFOLIO');
+  console.log('  PORTFOLIO_GH_TOKEN is blank -> the portfolio step will fail.');
+  console.log('  The Blogger post still finishes normally.');
+} else {
+  console.log('');
+  console.log('PORTFOLIO');
+  console.log('  Token is set (hidden). Daily push happens only when PORTFOLIO_PUBLISH="true".');
 }
 
 console.log('IMAGES');

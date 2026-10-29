@@ -24,14 +24,16 @@ import 'dotenv/config';
 
 import { getConfig } from './config.js';
 import { loadCategories, chooseCategory, parseCategoryOverride, describeRotation } from './categories.js';
-import { getIstDate, getIstTime, readPosted, writePosted, hasLivePostForDate, addEntry, getRecentTitles, getTitlesForCategory } from './logger.js';
-import { getNewsHeadlines } from './news.js';
-import { generateTopic } from './topic.js';
+import { getIstDate, getIstTime, readPosted, writePosted, hasLivePostForDate, addEntry } from './logger.js';
+import { selectTopicAndFacts, parseTopicOverride } from './topicSelection.js';
 import { generateArticle } from './article.js';
 import { findImages } from './images.js';
 import { buildArticleHtml } from './html.js';
 import { detectRepo, buildImageUrl, waitForImage, commitAndPush, IMAGES_DIR } from './cdn.js';
 import { getAccessToken, publishPost, publishExistingPost } from './blogger.js';
+
+// Kept as a public export because this file used to own the parser.
+export { parseTopicOverride };
 
 const TOTAL_STEPS = 8;
 
@@ -62,30 +64,6 @@ export function shouldShowPortfolio(dateString) {
   const day = Number(String(dateString).slice(8, 10));
   if (!Number.isFinite(day)) return false;
   return day % 2 === 1;
-}
-
-/**
- * Reads --topic="Some subject" from the command line.
- *
- *   npm run post -- --topic="What is vibe coding"
- *   npm run post -- --topic What is vibe coding   (space form)
- *
- * When it is given, Step 2 skips the topic picker and the judge and
- * writes about exactly this. Useful for testing one idea on demand.
- *
- * @param {string[]} [argv]
- * @returns {string} '' when the flag was not used
- */
-export function parseTopicOverride(argv = process.argv.slice(2)) {
-  const args = argv.map(String);
-  for (let i = 0; i < args.length; i++) {
-    const equals = args[i].match(/^--topic=(.*)$/i);
-    if (equals && equals[1].trim()) return equals[1].trim();
-    if (/^--topic$/i.test(args[i]) && args[i + 1] && !args[i + 1].startsWith('--')) {
-      return args[i + 1].trim();
-    }
-  }
-  return '';
 }
 
 /**
@@ -257,37 +235,15 @@ async function main() {
   // ---- Step 2: topic -------------------------------------------
   step(2, 'Choosing a fresh topic');
 
-  const recentTitles = getRecentTitles(40, posted);
-  const sameCategoryTitles = getTitlesForCategory(category.id, posted);
-
-  console.log(`      Sending the last ${recentTitles.length} title(s) so we do not repeat`);
-
-  // News-based categories (AI Updates) get real headlines so the topic
-  // is grounded in what actually happened, not the model's old memory.
-  const news = await getNewsHeadlines({ category, count: 8 });
-
-  // --topic="..." writes about exactly that subject, skipping the
-  // picker and the judge. No flag = normal daily behaviour.
-  const topicOverride = parseTopicOverride();
-  let topic;
-  let angle = '';
-  let judgeReason = 'forced with --topic';
-  let attempts = 0;
-
-  if (topicOverride) {
-    topic = topicOverride;
-    console.log(`      Topic forced: "${topic}" (topic picker skipped)`);
-  } else {
-    ({ topic, angle, judgeReason, attempts } = await generateTopic({
-      category,
-      recentTitles,
-      language: config.language,
-      isNewsBased: category.news_based === true,
-      newsHeadlines: news.headlines,
-      today,
-    }));
-    console.log(`      Category used ${attempts} attempt(s), judge said: "${judgeReason}"`);
-  }
+  // Shared with the portfolio-only entry point. News-based categories
+  // (AI Updates) get real headlines so the topic is grounded in what
+  // actually happened, not the model's old memory.
+  const { topic, angle, news } = await selectTopicAndFacts({
+    category,
+    config,
+    today,
+    posted,
+  });
 
   // ---- Step 3: article -----------------------------------------
   step(3, 'Writing the article');
@@ -354,6 +310,7 @@ async function main() {
         credit: image.credit,
         source: image.source,
         file: image.file,
+        pixabayId: image.pixabayId,
       };
 
     hosted = {
@@ -438,9 +395,20 @@ async function main() {
     // without guessing which one it was.
     postId: String(result.id),
     draft: config.isDraft,
+    // Read by the separate portfolio run so it never reuses these
+    // photos or this image search phrase.
+    imageIds: [saved.hero, ...saved.sections]
+      .filter(Boolean)
+      .map((image) => image.pixabayId)
+      .filter(Boolean),
+    imageQuery: article.image_keywords?.[0] ?? '',
   });
 
   console.log(`      Remembered: "${article.title}"`);
+
+  // The portfolio website is NOT handled here. It is a separate run
+  // (src/portfolioEntry.js --scheduled) that reads today's entry from
+  // posted.json after this process has finished.
 
   const categoryLine = `\nCategory: ${category.id} (${category.label})`;
   const imageNote = hosted.hero || hosted.sections.length > 0

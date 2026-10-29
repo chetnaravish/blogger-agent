@@ -21,3 +21,6 @@ Thumbs.db
 *.log
 news-cache.json
 tmp-*.mjs
+
+# ---- Portfolio dry-run output ----
+out/

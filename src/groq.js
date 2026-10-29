@@ -31,6 +31,26 @@ export function getActiveModel() {
   return activeModel;
 }
 
+/**
+ * Runs fn with a different active model, then restores the previous one.
+ * The portfolio writer uses this so its model never leaks into the Blogger
+ * step. An empty model means "use the normal active model".
+ */
+export async function withModel(model, fn) {
+  const requested = String(model ?? '').trim();
+  if (!requested) return fn();
+
+  const previous = getActiveModel();
+  if (requested === previous) return fn();
+
+  activeModel = requested;
+  try {
+    return await fn();
+  } finally {
+    activeModel = previous;
+  }
+}
+
 function requireApiKey() {
   const key = process.env.GROQ_API_KEY?.trim();
   if (!key) throw new Error('GROQ_API_KEY is missing. Run "npm run check" and fill it in .env');
@@ -238,6 +258,16 @@ function rememberOutputCap(model, cap) {
   }
 }
 
+/**
+ * The effective output budget for one reply: the smaller of our own
+ * ceiling and whatever this model currently allows. Callers that split
+ * a long job into several requests use this instead of guessing a number.
+ */
+export async function getOutputTokenBudget() {
+  const model = getActiveModel();
+  return Math.min(MAX_TOKENS, await getModelOutputCap(model));
+}
+
 // Remembers when we last called Groq, and how long the token budget needs.
 let nextGroqCallNotBefore = 0;
 
@@ -261,6 +291,19 @@ function rateLimitWaitMs(response) {
 async function respectRateLimit() {
   const wait = nextGroqCallNotBefore - Date.now();
   if (wait > 0) await sleep(wait);
+}
+
+/**
+ * Pauses only when the existing rate-limit logic says the token window is
+ * not ready yet. Returns the pause in milliseconds, or 0 when no wait was
+ * needed. Multi-call writers use this between their small requests.
+ */
+export async function waitForRateLimit() {
+  const wait = nextGroqCallNotBefore - Date.now();
+  if (wait <= 0) return 0;
+  const pause = wait + 250;
+  await sleep(pause);
+  return pause;
 }
 
 // Takes a fetch error and explains it properly. Node hides the real reason
@@ -289,10 +332,17 @@ function describeNetworkError(error) {
  *   3. plain text - we parse the JSON ourselves with extractJson()
  *
  * @param {Array<{role:string, content:string}>} messages
- * @param {{ json?: boolean }} options  json:true asks for a JSON-only answer
+ * @param {{ json?: boolean, temperature?: number, maxTokens?: number, onUsage?: (usage: object|null) => void }} options
+ *        json:true asks for a JSON-only answer. temperature defaults to
+ *        0.8 so every existing caller behaves exactly as before.
+ *        maxTokens lets a caller keep one small request well below the
+ *        model's ceiling; it is clamped to the detected cap anyway.
+ *        onUsage receives Groq's usage object after a successful reply.
  */
 export async function chat(messages, options = {}) {
   const wantsJson = Boolean(options.json);
+  const temperature = Number.isFinite(options.temperature) ? options.temperature : 0.8;
+  const requestedMaxTokens = Number.isFinite(options.maxTokens) ? Math.floor(options.maxTokens) : Infinity;
 
   // We start in strict JSON mode. If the model will not produce valid JSON,
   // we drop to plain text and parse it ourselves. extractJson() handles
@@ -323,8 +373,8 @@ export async function chat(messages, options = {}) {
     const body = {
       model: getActiveModel(),
       messages: useJsonMode ? messages : messages,
-      temperature: 0.8,
-      max_tokens: Math.min(MAX_TOKENS, cap),
+      temperature,
+      max_tokens: Math.min(MAX_TOKENS, cap, requestedMaxTokens > 0 ? requestedMaxTokens : Infinity),
     };
 
     if (useJsonMode) {
@@ -401,6 +451,7 @@ export async function chat(messages, options = {}) {
       }
 
       const data = await response.json();
+      if (typeof options.onUsage === 'function') options.onUsage(data?.usage ?? null);
       return data?.choices?.[0]?.message?.content ?? '';
     } catch (error) {
       lastError = error;
