@@ -165,5 +165,20 @@
     "url": "https://chetnatechblog.blogspot.com/2026/10/turn-blog-posts-into-lead-magnets-with.html",
     "postId": "4304936477481186895",
     "draft": false
+  },
+  {
+    "date": "2026-10-30",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI from breaking your CSS when adding features",
+    "topic": "Stop AI from overwriting your custom CSS when adding new features",
+    "url": "https://chetnatechblog.blogspot.com/2026/10/stop-ai-from-breaking-your-css-when.html",
+    "postId": "686063515496988669",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "5177803"
+    ],
+    "imageQuery": "laptop screen with code editor"
   }
 ]
