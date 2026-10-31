@@ -180,5 +180,20 @@
       "5177803"
     ],
     "imageQuery": "laptop screen with code editor"
+  },
+  {
+    "date": "2026-10-31",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Did OpenAI stop reading your website?",
+    "topic": "Is your data still in the training mix after OpenAI changed its live scraping policy?",
+    "url": "https://chetnatechblog.blogspot.com/2026/10/did-openai-stop-reading-your-website.html",
+    "postId": "4270311062542955898",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "6296036"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
