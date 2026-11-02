@@ -210,5 +210,20 @@
       "793032"
     ],
     "imageQuery": "person using laptop"
+  },
+  {
+    "date": "2026-11-02",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI From Deleting Your Old Code",
+    "topic": "How to Stop AI from Deleting Old Features When Adding New Ones",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/stop-ai-from-deleting-your-old-code.html",
+    "postId": "1928803108698595987",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "932926"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
