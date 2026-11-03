@@ -225,5 +225,20 @@
       "932926"
     ],
     "imageQuery": "laptop screen with code"
+  },
+  {
+    "date": "2026-11-03",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Is AI malware targeting you?",
+    "topic": "Should you worry about LLM-powered malware targeting you?",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/is-ai-malware-targeting-you.html",
+    "postId": "522586624374184081",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "2910624"
+    ],
+    "imageQuery": "laptop with code screen"
   }
 ]
