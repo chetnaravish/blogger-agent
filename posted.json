@@ -255,5 +255,20 @@
       "1185626"
     ],
     "imageQuery": "laptop screen showing website analytics"
+  },
+  {
+    "date": "2026-11-05",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Fixing AI Code Errors: A Simple Prompt Guide",
+    "topic": "How to fix broken AI code when the error message is unclear",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/fixing-ai-code-errors-simple-prompt.html",
+    "postId": "4236304291999912534",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "849825"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
