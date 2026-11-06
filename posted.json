@@ -270,5 +270,20 @@
       "849825"
     ],
     "imageQuery": "laptop screen with code"
+  },
+  {
+    "date": "2026-11-06",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Tencent Hy4: Does Open Source Mean Your Data Is Safe?",
+    "topic": "Tencent's Hy4: What a leading open-source model means for your data privacy",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/tencent-hy4-does-open-source-mean-your.html",
+    "postId": "2360410695081637973",
+    "draft": false,
+    "imageIds": [
+      "410311",
+      "614213"
+    ],
+    "imageQuery": "smartphone in hand"
   }
 ]
