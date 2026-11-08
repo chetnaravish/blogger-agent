@@ -300,5 +300,20 @@
       "2993000"
     ],
     "imageQuery": "person looking at laptop screen"
+  },
+  {
+    "date": "2026-11-08",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop your AI code from breaking between sessions",
+    "topic": "How to keep your AI-generated codebase consistent across multiple sessions",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/stop-your-ai-code-from-breaking-between.html",
+    "postId": "3320578533604251016",
+    "draft": false,
+    "imageIds": [
+      "6856557",
+      "3652497"
+    ],
+    "imageQuery": "two open laptop screens"
   }
 ]
