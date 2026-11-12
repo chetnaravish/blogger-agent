@@ -345,5 +345,20 @@
       "849825"
     ],
     "imageQuery": "laptop screen showing email dashboard"
+  },
+  {
+    "date": "2026-11-12",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI from breaking your app when adding features",
+    "topic": "Why your AI-generated app crashes when you add a new feature",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/stop-ai-from-breaking-your-app-when.html",
+    "postId": "8165006429279304936",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "791029"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
