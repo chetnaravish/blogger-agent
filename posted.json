@@ -360,5 +360,20 @@
       "791029"
     ],
     "imageQuery": "laptop screen with code"
+  },
+  {
+    "date": "2026-11-13",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Run AI on your Mac: No GPU? No Problem.",
+    "topic": "Apple's new Mac app: Can you run powerful AI models privately without a GPU?",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/run-ai-on-your-mac-no-gpu-no-problem.html",
+    "postId": "7960930262166757023",
+    "draft": false,
+    "imageIds": [
+      "1867096",
+      "9922170"
+    ],
+    "imageQuery": "person typing on laptop"
   }
 ]
