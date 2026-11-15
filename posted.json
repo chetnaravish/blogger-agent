@@ -390,5 +390,20 @@
       "2581479"
     ],
     "imageQuery": "person typing on laptop"
+  },
+  {
+    "date": "2026-11-15",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Why your AI app breaks when you add a second page",
+    "topic": "Why your AI-built app crashes when you add a second page",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/why-your-ai-app-breaks-when-you-add.html",
+    "postId": "3594114674952643909",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "2743547"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
