@@ -405,5 +405,20 @@
       "2743547"
     ],
     "imageQuery": "laptop screen with code"
+  },
+  {
+    "date": "2026-11-16",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "DeepMind Opens Weather Data: What It Means for You",
+    "topic": "Do AI weather forecasts actually work? DeepMind opens the data",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/deepmind-opens-weather-data-what-it.html",
+    "postId": "3669186504200435512",
+    "draft": false,
+    "imageIds": [
+      "193760",
+      "1867203"
+    ],
+    "imageQuery": "computer screen with weather map"
   }
 ]
