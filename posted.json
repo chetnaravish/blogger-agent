@@ -435,5 +435,20 @@
       "791029"
     ],
     "imageQuery": "laptop screen email list"
+  },
+  {
+    "date": "2026-11-18",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Why Your AI App Loses Data on Refresh",
+    "topic": "Why your AI-built app loses data when you refresh the page",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/why-your-ai-app-loses-data-on-refresh.html",
+    "postId": "3056975229518789468",
+    "draft": false,
+    "imageIds": [
+      "459196",
+      "1839406"
+    ],
+    "imageQuery": "browser refresh icon"
   }
 ]
