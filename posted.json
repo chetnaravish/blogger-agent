@@ -450,5 +450,20 @@
       "1839406"
     ],
     "imageQuery": "browser refresh icon"
+  },
+  {
+    "date": "2026-11-19",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "California sues OpenAI: What it means for your data",
+    "topic": "What California's lawsuit against OpenAI means for your data safety",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/california-sues-openai-what-it-means.html",
+    "postId": "833229511355693534",
+    "draft": false,
+    "imageIds": [
+      "423446",
+      "1839406"
+    ],
+    "imageQuery": "scales of justice"
   }
 ]
