@@ -480,5 +480,20 @@
       "3267505"
     ],
     "imageQuery": "person typing on laptop"
+  },
+  {
+    "date": "2026-11-21",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Why your AI app crashes when you add a page",
+    "topic": "Why your AI-built app crashes when you add a second page",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/why-your-ai-app-crashes-when-you-add.html",
+    "postId": "490970320081473698",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "620304"
+    ],
+    "imageQuery": "laptop screen with code"
   }
 ]
