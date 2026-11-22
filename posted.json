@@ -495,5 +495,20 @@
       "620304"
     ],
     "imageQuery": "laptop screen with code"
+  },
+  {
+    "date": "2026-11-22",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Why Cursor Is Dropping Chinese AI Models",
+    "topic": "Is Cursor phasing out Chinese AI models for security?",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/why-cursor-is-dropping-chinese-ai-models.html",
+    "postId": "2563626503339255519",
+    "draft": false,
+    "imageIds": [
+      "1839406",
+      "610101"
+    ],
+    "imageQuery": "code editor on screen"
   }
 ]
