@@ -525,5 +525,20 @@
       "5700049"
     ],
     "imageQuery": "person typing on laptop"
+  },
+  {
+    "date": "2026-11-24",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop AI from breaking your code with scoped prompts",
+    "topic": "How to stop AI from rewriting working code",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/stop-ai-from-breaking-your-code-with.html",
+    "postId": "304060377629751833",
+    "draft": false,
+    "imageIds": [
+      "1839406",
+      "1076536"
+    ],
+    "imageQuery": "code editor screen with highlighted lines"
   }
 ]
