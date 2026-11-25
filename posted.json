@@ -540,5 +540,20 @@
       "1076536"
     ],
     "imageQuery": "code editor screen with highlighted lines"
+  },
+  {
+    "date": "2026-11-25",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "Why AI Labs Hold Back New Models",
+    "topic": "What does it mean when AI insiders say models are 'too unsafe to release'?",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/why-ai-labs-hold-back-new-models.html",
+    "postId": "3206916685794597223",
+    "draft": false,
+    "imageIds": [
+      "1839406",
+      "5055599"
+    ],
+    "imageQuery": "computer screen with code"
   }
 ]
