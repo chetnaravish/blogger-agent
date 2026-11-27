@@ -570,5 +570,20 @@
       "410324"
     ],
     "imageQuery": "laptop showing website analytics"
+  },
+  {
+    "date": "2026-11-27",
+    "category": "vibe_coding",
+    "categoryLabel": "Vibe Coding",
+    "title": "Stop explaining your project every time: use context files",
+    "topic": "How to make AI remember your project structure between sessions",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/stop-explaining-your-project-every-time.html",
+    "postId": "6292045404517934146",
+    "draft": false,
+    "imageIds": [
+      "1839876",
+      "3930337"
+    ],
+    "imageQuery": "laptop screen showing code editor"
   }
 ]
