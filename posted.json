@@ -585,5 +585,20 @@
       "3930337"
     ],
     "imageQuery": "laptop screen showing code editor"
+  },
+  {
+    "date": "2026-11-28",
+    "category": "ai_updates",
+    "categoryLabel": "AI Updates",
+    "title": "AI Leaks Data via GPU Errors: What You Must Check",
+    "topic": "Sandboxed AI models leaking data via shared servers",
+    "url": "https://chetnatechblog.blogspot.com/2026/11/ai-leaks-data-via-gpu-errors-what-you.html",
+    "postId": "6547964006058707644",
+    "draft": false,
+    "imageIds": [
+      "8097838",
+      "762548"
+    ],
+    "imageQuery": "server rack with glowing lights"
   }
 ]
